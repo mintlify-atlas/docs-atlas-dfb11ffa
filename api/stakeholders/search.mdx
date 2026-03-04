@@ -1,0 +1,233 @@
+---
+title: 'Stakeholder Search'
+description: 'Unified search across customers and suppliers'
+---
+
+## Overview
+
+The Stakeholder Search endpoint provides a unified search interface to find customers and suppliers simultaneously. This is useful for POS systems, quick lookups, and reporting where you need to search across both stakeholder types.
+
+**Endpoint:** `GET /api/v1/stakeholders/search`
+
+## Authentication
+
+Requires JWT authentication via Bearer token.
+
+**Required Roles:** `admin`, `gestor`, `consultor`
+
+## Query Parameters
+
+<ParamField query="q" type="string" default="">
+  Search query string. Searches across name, document number, email, and other text fields. Empty query returns recent records.
+</ParamField>
+
+<ParamField query="type" type="string" default="all">
+  Filter by stakeholder type. Options:
+  - `all` - Search both customers and suppliers (default)
+  - `customer` - Search only customers
+  - `supplier` - Search only suppliers
+</ParamField>
+
+<ParamField query="limit" type="integer" default="10">
+  Maximum number of results to return
+</ParamField>
+
+## Response
+
+Returns an array of stakeholder objects with a `type` field indicating whether each result is a customer or supplier.
+
+### Response Fields
+
+<ResponseField name="id" type="string">
+  Unique identifier for the stakeholder
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  Stakeholder type: `customer` or `supplier`
+</ResponseField>
+
+<ResponseField name="nombre" type="string">
+  Stakeholder name
+</ResponseField>
+
+<ResponseField name="numero_documento" type="string">
+  Document number
+</ResponseField>
+
+<ResponseField name="tipo_documento" type="string">
+  Document type (DNI, RUC, CE, etc.)
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  Email address (if provided)
+</ResponseField>
+
+<ResponseField name="telefono" type="string">
+  Phone number (if provided)
+</ResponseField>
+
+<ResponseField name="direccion" type="string">
+  Address (if provided)
+</ResponseField>
+
+<ResponseField name="condicion_pago" type="string">
+  Payment condition (customers only)
+</ResponseField>
+
+<ResponseField name="plazo_entrega" type="string">
+  Delivery terms (suppliers only)
+</ResponseField>
+
+## Examples
+
+### Search all stakeholders
+
+```bash cURL
+curl -X GET "http://localhost:5000/api/v1/stakeholders/search?q=juan" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```python Python
+import requests
+
+url = "http://localhost:5000/api/v1/stakeholders/search"
+headers = {"Authorization": "Bearer YOUR_JWT_TOKEN"}
+params = {"q": "juan", "limit": 10}
+
+response = requests.get(url, headers=headers, params=params)
+print(response.json())
+```
+
+<Accordion title="Response">
+```json 200 OK
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "type": "customer",
+    "nombre": "Juan Pérez",
+    "tipo_documento": "DNI",
+    "numero_documento": "12345678",
+    "email": "juan.perez@example.com",
+    "telefono": "+51 987654321",
+    "direccion": "Av. Principal 123",
+    "condicion_pago": "CREDITO_30"
+  },
+  {
+    "id": "660e8400-e29b-41d4-a716-446655440001",
+    "type": "supplier",
+    "nombre": "Juan Distribuciones SAC",
+    "tipo_documento": "RUC",
+    "numero_documento": "20123456789",
+    "email": "ventas@juandist.com",
+    "telefono": "+51 999888777",
+    "direccion": "Av. Industrial 456",
+    "plazo_entrega": "3-5 días"
+  }
+]
+```
+</Accordion>
+
+### Search only customers
+
+```bash cURL
+curl -X GET "http://localhost:5000/api/v1/stakeholders/search?q=garcia&type=customer" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```python Python
+import requests
+
+url = "http://localhost:5000/api/v1/stakeholders/search"
+headers = {"Authorization": "Bearer YOUR_JWT_TOKEN"}
+params = {"q": "garcia", "type": "customer", "limit": 5}
+
+response = requests.get(url, headers=headers, params=params)
+print(response.json())
+```
+
+### Search by document number
+
+```bash cURL
+curl -X GET "http://localhost:5000/api/v1/stakeholders/search?q=20123456789" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+This will search across all text fields, including document numbers.
+
+### Get recent stakeholders
+
+```bash cURL
+curl -X GET "http://localhost:5000/api/v1/stakeholders/search?limit=20" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+Empty query returns the most recently created/updated records.
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="POS customer lookup" icon="cash-register">
+    Quickly find customers during sales transactions without navigating between customer and supplier lists.
+  </Card>
+  
+  <Card title="Unified reporting" icon="chart-mixed">
+    Generate reports that include both customer and supplier data without multiple API calls.
+  </Card>
+  
+  <Card title="Quick search UI" icon="magnifying-glass">
+    Implement autocomplete or type-ahead search boxes that search across all stakeholders.
+  </Card>
+  
+  <Card title="Contact lookup" icon="address-book">
+    Find stakeholder contact information quickly by name, email, or document number.
+  </Card>
+</CardGroup>
+
+## Implementation Details
+
+The search is implemented in `stakeholder_service.py` and performs a case-insensitive search across multiple fields:
+
+- Name (nombre)
+- Document number (numero_documento)
+- Email
+- Other text fields
+
+Results are sorted by relevance and limited to the specified count.
+
+## Error Responses
+
+<ResponseField name="400 Bad Request">
+```json
+{
+  "error": "Invalid search parameters"
+}
+```
+</ResponseField>
+
+<ResponseField name="401 Unauthorized">
+```json
+{
+  "error": "Missing or invalid authentication token"
+}
+```
+</ResponseField>
+
+<ResponseField name="403 Forbidden">
+```json
+{
+  "error": "Insufficient permissions"
+}
+```
+</ResponseField>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Customers API" icon="user" href="/api/stakeholders/customers">
+    Full CRUD operations for customer records
+  </Card>
+  
+  <Card title="Suppliers API" icon="truck" href="/api/stakeholders/suppliers">
+    Full CRUD operations for supplier records
+  </Card>
+</CardGroup>

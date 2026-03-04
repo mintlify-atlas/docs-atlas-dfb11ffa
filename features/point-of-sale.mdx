@@ -1,0 +1,198 @@
+---
+title: Point of Sale
+description: Register sales transactions and manage customer purchases in real-time
+---
+
+The Point of Sale (POS) feature provides a streamlined interface for registering sales transactions, automatically managing inventory, and calculating profit margins using FIFO costing.
+
+## Overview
+
+The POS system allows you to:
+- Register sales with automatic inventory deduction
+- Link sales to customers for tracking
+- Calculate profit margins using FIFO cost basis
+- Process transactions with custom or suggested pricing
+- View immediate sale confirmation with cost and profit details
+
+<Note>
+The POS feature requires `admin` or `gestor` role permissions to access.
+</Note>
+
+## Sale Registration Workflow
+
+<Steps>
+  <Step title="Select product">
+    Choose the product being sold from the dropdown. The system automatically populates the suggested price, but you can override it.
+  </Step>
+  
+  <Step title="Enter quantity">
+    Specify the quantity being sold. The system validates that sufficient stock is available.
+  </Step>
+  
+  <Step title="Link customer (optional)">
+    Use the stakeholder search to link the sale to a specific customer for tracking purposes.
+  </Step>
+  
+  <Step title="Confirm sale">
+    Submit the transaction. The system automatically:
+    - Deducts inventory using FIFO logic
+    - Calculates the cost of goods sold (COGS)
+    - Computes the profit margin
+    - Creates an EXIT movement record
+    - Updates batch quantities
+  </Step>
+</Steps>
+
+## How It Works
+
+The POS system integrates with the inventory movement API to register each sale as an EXIT movement:
+
+```python
+# From PointOfSalePage.jsx:42-49
+const dataToSubmit = {
+    product_id: selectedProduct,
+    customer_id: customerId || null,  // Optional
+    quantity: parseInt(quantity, 10),
+    unit_price: parseFloat(unitPrice),
+    notes: 'POS Sale'
+};
+const result = await registerSale(dataToSubmit);
+```
+
+This creates a movement record that:
+1. **Validates stock availability** - Ensures sufficient quantity exists
+2. **Applies FIFO costing** - Deducts from oldest batches first
+3. **Calculates COGS** - Sums the unit costs from affected batches
+4. **Computes profit** - `(unit_price - average_cost) × quantity`
+5. **Updates batches** - Reduces `quantity_available` for each batch used
+
+### FIFO Cost Calculation
+
+The system uses First-In-First-Out logic to determine the cost of goods sold:
+
+```python
+# From stock_service.py:68-72
+batches = (
+    db.query(Batch)
+    .filter(Batch.product_id == product_id, Batch.quantity_available > 0)
+    .order_by(Batch.expiration_date.asc(), Batch.purchase_date.asc())
+    .all()
+)
+```
+
+**Example:**
+- Product has 3 batches: Batch A (10 units @ $5), Batch B (15 units @ $6), Batch C (20 units @ $7)
+- Sale: 20 units @ $10 each
+- FIFO deduction: 10 from Batch A + 10 from Batch B
+- COGS: (10 × $5) + (10 × $6) = $110
+- Revenue: 20 × $10 = $200
+- Profit: $200 - $110 = $90
+
+## Sale Confirmation
+
+After a successful transaction, the POS displays:
+
+<CardGroup cols={2}>
+  <Card title="Transaction details" icon="receipt">
+    - Movement ID
+    - Product name and SKU
+    - Quantity sold
+    - Unit price
+    - Customer (if linked)
+  </Card>
+  
+  <Card title="Financial summary" icon="dollar-sign">
+    - Total revenue
+    - Cost of goods sold (COGS)
+    - Profit amount
+    - Profit margin percentage
+  </Card>
+</CardGroup>
+
+## Integration with Inventory
+
+Each POS sale creates an EXIT movement that:
+- Appears in movement history
+- Updates product stock levels
+- Affects batch quantities
+- Triggers audit logs
+- Impacts inventory valuation reports
+
+You can view all POS sales by filtering movements with `notes: "POS Sale"` in the movement history.
+
+## User Interface
+
+The POS interface provides:
+
+1. **Product selector** - Dropdown with product name and SKU
+2. **Quantity input** - Numeric input with validation
+3. **Price field** - Pre-filled with suggested price, editable
+4. **Customer search** - Optional stakeholder lookup
+5. **Submit button** - Processes the sale
+6. **Confirmation panel** - Shows sale details and profit calculation
+
+<Tip>
+The suggested price is automatically populated from the product's `suggested_price` field, but can be overridden to handle discounts or special pricing.
+</Tip>
+
+## Error Handling
+
+The POS system validates:
+
+<AccordionGroup>
+  <Accordion title="Insufficient stock">
+    If the requested quantity exceeds available inventory, the sale is rejected with an error message indicating the maximum available quantity.
+  </Accordion>
+  
+  <Accordion title="Invalid product">
+    If no product is selected or the product ID is invalid, the system prevents submission.
+  </Accordion>
+  
+  <Accordion title="Invalid price or quantity">
+    Zero or negative values are rejected. Quantity must be a positive integer, and price must be a positive number.
+  </Accordion>
+  
+  <Accordion title="Missing batches">
+    If a product has no available batches (all depleted), the sale cannot proceed even if the product exists.
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Link customers" icon="user-tag">
+    Associate sales with customers to enable purchase history tracking and customer analytics.
+  </Card>
+  
+  <Card title="Use suggested pricing" icon="tags">
+    Keep the suggested price field updated in product management to streamline POS transactions.
+  </Card>
+  
+  <Card title="Monitor stock levels" icon="boxes-stacked">
+    Use the dashboard low-stock alerts to prevent failed sales due to depleted inventory.
+  </Card>
+  
+  <Card title="Review profit margins" icon="chart-line">
+    Regularly check the profit calculations to ensure pricing strategies are effective.
+  </Card>
+</CardGroup>
+
+## Related Features
+
+<CardGroup cols={2}>
+  <Card title="Stock Movements" icon="arrows-rotate" href="/features/stock-movements">
+    View complete movement history including POS sales
+  </Card>
+  
+  <Card title="Movement API" icon="code" href="/api/movements/create">
+    Technical details of the sale registration endpoint
+  </Card>
+  
+  <Card title="Customer Management" icon="users" href="/features/stakeholder-management">
+    Manage customer records for sale tracking
+  </Card>
+  
+  <Card title="Inventory Reports" icon="chart-line" href="/features/inventory-reports">
+    Analyze sales performance and profitability
+  </Card>
+</CardGroup>

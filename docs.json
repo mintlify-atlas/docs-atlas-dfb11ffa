@@ -37,6 +37,7 @@
               "features/product-management",
               "features/batch-tracking",
               "features/stock-movements",
+              "features/point-of-sale",
               "features/inventory-reports",
               "features/stakeholder-management"
             ]
@@ -99,7 +100,8 @@
             "group": "Stakeholders",
             "pages": [
               "api/stakeholders/customers",
-              "api/stakeholders/suppliers"
+              "api/stakeholders/suppliers",
+              "api/stakeholders/search"
             ]
           },
           {
