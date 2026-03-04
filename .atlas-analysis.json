@@ -1,0 +1,149 @@
+{
+  "projectType": "saas",
+  "projectName": "Inventory Management System",
+  "projectDescription": "A comprehensive inventory management platform with product tracking, stock movements, batch management, reporting, and multi-user role-based access control.",
+  "theme": "linden",
+  "primaryColor": "#2563eb",
+  "lightColor": "#3b82f6",
+  "darkColor": "#1e40af",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/product-management",
+              "features/batch-tracking",
+              "features/stock-movements",
+              "features/inventory-reports",
+              "features/stakeholder-management"
+            ]
+          },
+          {
+            "group": "User Management",
+            "pages": [
+              "users/authentication",
+              "users/roles-permissions",
+              "users/user-management"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture/overview",
+              "architecture/hexagonal-design",
+              "architecture/database-schema"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Authentication",
+            "pages": [
+              "api/auth/login",
+              "api/auth/password-reset"
+            ]
+          },
+          {
+            "group": "Products",
+            "pages": [
+              "api/products/overview",
+              "api/products/create",
+              "api/products/list",
+              "api/products/update-prices",
+              "api/products/price-history"
+            ]
+          },
+          {
+            "group": "Batches",
+            "pages": [
+              "api/batches/overview",
+              "api/batches/create",
+              "api/batches/list"
+            ]
+          },
+          {
+            "group": "Movements",
+            "pages": [
+              "api/movements/overview",
+              "api/movements/create",
+              "api/movements/list"
+            ]
+          },
+          {
+            "group": "Stakeholders",
+            "pages": [
+              "api/stakeholders/customers",
+              "api/stakeholders/suppliers"
+            ]
+          },
+          {
+            "group": "Reports",
+            "pages": [
+              "api/reports/dashboard",
+              "api/reports/valorization",
+              "api/reports/rotation",
+              "api/reports/movements"
+            ]
+          },
+          {
+            "group": "Users & Audit",
+            "pages": [
+              "api/users/management",
+              "api/audit/logs"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Product and batch inventory tracking with expiration management",
+    "Stock movement recording (entries, exits, adjustments)",
+    "Customer and supplier stakeholder management",
+    "Real-time inventory valuation and rotation reports",
+    "Role-based access control (Admin, Manager, Consultant)",
+    "Comprehensive audit logging for all system actions",
+    "Dashboard with key inventory metrics and alerts",
+    "Price history tracking and bulk price updates"
+  ],
+  "publicApiSurface": [
+    "POST /api/v1/auth/login",
+    "POST /api/v1/auth/forgot-password",
+    "POST /api/v1/auth/reset-password",
+    "GET /api/v1/products/",
+    "POST /api/v1/products/",
+    "GET /api/v1/products/<product_id>",
+    "POST /api/v1/products/update-prices",
+    "GET /api/v1/products/<product_id>/price-history",
+    "GET /api/v1/batches/",
+    "POST /api/v1/batches/",
+    "GET /api/v1/batches/<batch_id>",
+    "GET /api/v1/movements/",
+    "POST /api/v1/movements/",
+    "GET /api/v1/customers/",
+    "POST /api/v1/customers/",
+    "GET /api/v1/suppliers/",
+    "POST /api/v1/suppliers/",
+    "GET /api/v1/reports/dashboard",
+    "GET /api/v1/reports/valorization",
+    "GET /api/v1/reports/rotation",
+    "GET /api/v1/reports/movements/search",
+    "GET /api/v1/users/",
+    "POST /api/v1/users/",
+    "GET /api/v1/audit/"
+  ]
+}
