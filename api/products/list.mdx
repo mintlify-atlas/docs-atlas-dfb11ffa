@@ -1,0 +1,175 @@
+---
+title: "List Products"
+api: "GET /api/v1/products/"
+description: "Retrieve all products with pagination support"
+---
+
+## Authorization
+
+Required roles: `admin`, `gestor`, `consultor`
+
+## Query Parameters
+
+<ParamField query="skip" type="integer" default="0">
+  Number of records to skip for pagination
+</ParamField>
+
+<ParamField query="limit" type="integer" default="100">
+  Maximum number of records to return (max: 100)
+</ParamField>
+
+## Response
+
+Returns an array of product objects.
+
+<ResponseField name="id" type="string">
+  Unique product identifier (UUID)
+</ResponseField>
+
+<ResponseField name="sku" type="string">
+  Stock Keeping Unit
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Product name
+</ResponseField>
+
+<ResponseField name="category" type="string">
+  Product category
+</ResponseField>
+
+<ResponseField name="unit_measure" type="string">
+  Unit of measurement
+</ResponseField>
+
+<ResponseField name="unit_value" type="number">
+  Value per unit
+</ResponseField>
+
+<ResponseField name="is_perishable" type="boolean">
+  Whether product has expiration date
+</ResponseField>
+
+<ResponseField name="expiration_date" type="string">
+  Expiration date if applicable
+</ResponseField>
+
+<ResponseField name="suggested_price" type="number">
+  Recommended selling price
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X GET "https://api.example.com/api/v1/products/?skip=0&limit=10" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+## Example Response
+
+```json
+[
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "sku": "PROD-001",
+    "name": "Organic Apples",
+    "category": "Fruits",
+    "unit_measure": "kg",
+    "unit_value": 1.0,
+    "is_perishable": true,
+    "expiration_date": "2026-03-15",
+    "suggested_price": 4.99
+  },
+  {
+    "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+    "sku": "PROD-002",
+    "name": "Steel Bolts",
+    "category": "Hardware",
+    "unit_measure": "units",
+    "unit_value": 1.0,
+    "is_perishable": false,
+    "expiration_date": null,
+    "suggested_price": 0.25
+  }
+]
+```
+
+## Get Single Product
+
+### Endpoint
+
+```
+GET /api/v1/products/{product_id}
+```
+
+### Authorization
+
+Required roles: `admin`, `gestor`, `consultor`
+
+### Path Parameters
+
+<ParamField path="product_id" type="string" required>
+  UUID of the product to retrieve
+</ParamField>
+
+### Example Request
+
+```bash
+curl -X GET https://api.example.com/api/v1/products/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "sku": "PROD-001",
+  "name": "Organic Apples",
+  "category": "Fruits",
+  "unit_measure": "kg",
+  "unit_value": 1.0,
+  "is_perishable": true,
+  "expiration_date": "2026-03-15",
+  "suggested_price": 4.99
+}
+```
+
+### Error Responses
+
+#### 404 Not Found
+
+Returned when product doesn't exist:
+
+```json
+{
+  "detail": "Product not found"
+}
+```
+
+#### 401 Unauthorized
+
+Returned when authentication token is invalid or missing.
+
+#### 403 Forbidden
+
+Returned when the authenticated user lacks required role.
+
+## Pagination Tips
+
+- Use `skip` and `limit` together for efficient pagination
+- Default limit is 100 items per request
+- To get the next page, increment `skip` by `limit`
+
+### Example: Paginating through all products
+
+```bash
+# First page (0-99)
+curl "https://api.example.com/api/v1/products/?skip=0&limit=100"
+
+# Second page (100-199)
+curl "https://api.example.com/api/v1/products/?skip=100&limit=100"
+
+# Third page (200-299)
+curl "https://api.example.com/api/v1/products/?skip=200&limit=100"
+```

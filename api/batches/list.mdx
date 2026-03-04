@@ -1,0 +1,246 @@
+---
+title: 'List Batches by Product'
+api: 'GET /api/v1/batches/product/{product_id}'
+---
+
+## Overview
+
+Retrieve all batches for a specific product. This endpoint is useful for auditing inventory costs, monitoring expiration dates, and analyzing stock levels.
+
+## Authentication
+
+**Required Roles**: `admin`, `gestor`, or `consultor`
+
+```python
+# backend/Product/Adapters/batch_controller.py:51
+@router.route('/product/<product_id>', methods=['GET'])
+@require_role('admin', 'gestor', 'consultor')
+def get_batches_by_product(product_id):
+```
+
+<Note>
+All authenticated users can view batches, including the read-only `consultor` role.
+</Note>
+
+## Path Parameters
+
+<ParamField path="product_id" type="string" required>
+  The UUID of the product to retrieve batches for
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="active_only" type="boolean" default="true">
+  Filter results to only show batches with available quantity > 0.
+  
+  - `true` - Returns only active batches with remaining inventory
+  - `false` - Returns all batches including fully depleted ones
+</ParamField>
+
+## Request Examples
+
+### Get Active Batches (Default)
+
+```bash
+GET /api/v1/batches/product/a8b12c3d-4e5f-6789-0abc-def123456789
+```
+
+### Get All Batches (Including Depleted)
+
+```bash
+GET /api/v1/batches/product/a8b12c3d-4e5f-6789-0abc-def123456789?active_only=false
+```
+
+## Response
+
+Returns an array of batch objects sorted by FIFO priority (expiration date, then purchase date).
+
+<ResponseField name="[].id" type="string">
+  Unique batch identifier
+</ResponseField>
+
+<ResponseField name="[].product_id" type="string">
+  Product UUID this batch belongs to
+</ResponseField>
+
+<ResponseField name="[].initial_quantity" type="integer">
+  Original quantity received
+</ResponseField>
+
+<ResponseField name="[].available_quantity" type="integer">
+  Current quantity remaining. Will be 0 for depleted batches when `active_only=false`.
+</ResponseField>
+
+<ResponseField name="[].unit_cost" type="float">
+  Cost per unit paid for this batch
+</ResponseField>
+
+<ResponseField name="[].purchase_date" type="string">
+  ISO 8601 timestamp when batch was received
+</ResponseField>
+
+<ResponseField name="[].expiration_date" type="string | null">
+  ISO 8601 expiration date or null
+</ResponseField>
+
+<ResponseField name="[].supplier_id" type="string | null">
+  Supplier UUID or null
+</ResponseField>
+
+<ResponseField name="[].entry_transaction_ref" type="string | null">
+  Reference to the entry movement transaction
+</ResponseField>
+
+## Response Example
+
+```json
+[
+  {
+    "id": "batch-001",
+    "product_id": "a8b12c3d-4e5f-6789-0abc-def123456789",
+    "initial_quantity": 100,
+    "available_quantity": 45,
+    "unit_cost": 12.50,
+    "purchase_date": "2026-01-15T08:00:00+00:00",
+    "expiration_date": "2026-06-15T00:00:00+00:00",
+    "supplier_id": "supplier-alpha",
+    "entry_transaction_ref": "movement-001"
+  },
+  {
+    "id": "batch-002",
+    "product_id": "a8b12c3d-4e5f-6789-0abc-def123456789",
+    "initial_quantity": 150,
+    "available_quantity": 150,
+    "unit_cost": 11.75,
+    "purchase_date": "2026-02-20T10:30:00+00:00",
+    "expiration_date": "2026-08-20T00:00:00+00:00",
+    "supplier_id": "supplier-beta",
+    "entry_transaction_ref": "movement-002"
+  },
+  {
+    "id": "batch-003",
+    "product_id": "a8b12c3d-4e5f-6789-0abc-def123456789",
+    "initial_quantity": 200,
+    "available_quantity": 200,
+    "unit_cost": 13.00,
+    "purchase_date": "2026-03-01T14:15:00+00:00",
+    "expiration_date": null,
+    "supplier_id": null,
+    "entry_transaction_ref": "movement-003"
+  }
+]
+```
+
+## Empty Response
+
+When no batches exist for the product:
+
+```json
+[]
+```
+
+## Error Responses
+
+### 401 Unauthorized
+
+Returned when authentication token is missing or invalid.
+
+### 403 Forbidden
+
+Returned when user does not have any of the required roles (`admin`, `gestor`, `consultor`).
+
+## Implementation Details
+
+```python
+# backend/Product/Adapters/batch_controller.py:51-72
+@router.route('/product/<product_id>', methods=['GET'])
+@require_role('admin', 'gestor', 'consultor')
+def get_batches_by_product(product_id):
+    db = next(get_db())
+    repo = MovementRepository(db)
+    active_only = request.args.get('active_only', 'true').lower() == 'true'
+    
+    batches = repo.get_batches_by_product(product_id, active_only)
+    result = []
+    for b in batches:
+        result.append({
+            "id": b.id,
+            "product_id": b.product_id,
+            "initial_quantity": b.initial_quantity,
+            "available_quantity": b.available_quantity,
+            "unit_cost": b.unit_cost,
+            "purchase_date": b.purchase_date.isoformat(),
+            "expiration_date": b.expiration_date.isoformat() if b.expiration_date else None,
+            "supplier_id": b.supplier_id,
+            "entry_transaction_ref": b.entry_transaction_ref
+        })
+    return jsonify(result), 200
+```
+
+## Use Cases
+
+### Calculate Average Cost Basis
+
+```python
+# Sum total cost across active batches
+total_cost = sum(batch['unit_cost'] * batch['available_quantity'] for batch in batches)
+total_qty = sum(batch['available_quantity'] for batch in batches)
+average_cost = total_cost / total_qty if total_qty > 0 else 0
+```
+
+### Monitor Expiring Inventory
+
+```python
+from datetime import datetime, timedelta
+
+today = datetime.now()
+expiring_soon = [
+    batch for batch in batches 
+    if batch['expiration_date'] and 
+       datetime.fromisoformat(batch['expiration_date']) < today + timedelta(days=30)
+]
+```
+
+### Supplier Performance Analysis
+
+```python
+# Group batches by supplier
+from collections import defaultdict
+
+supplier_batches = defaultdict(list)
+for batch in batches:
+    if batch['supplier_id']:
+        supplier_batches[batch['supplier_id']].append(batch)
+
+# Calculate metrics per supplier
+for supplier_id, batches in supplier_batches.items():
+    total_received = sum(b['initial_quantity'] for b in batches)
+    total_remaining = sum(b['available_quantity'] for b in batches)
+    turnover_rate = (total_received - total_remaining) / total_received
+```
+
+## FIFO Processing Order
+
+Batches are returned and processed in FIFO order based on:
+
+1. **Expiration date** (earliest first) - batches with no expiration date are treated as last priority
+2. **Purchase date** (oldest first) - when expiration dates are equal or both null
+
+```python
+# backend/Product/Domain/stock_service.py:68-72
+# FIFO sorting logic used internally
+max_date = datetime.max.replace(tzinfo=timezone.utc)
+batches.sort(key=lambda b: (
+    b.expiration_date.replace(tzinfo=timezone.utc) if b.expiration_date else max_date, 
+    b.purchase_date.replace(tzinfo=timezone.utc) if b.purchase_date else max_date
+))
+```
+
+<Tip>
+The batches returned by this endpoint follow the same FIFO order used when processing exits. The first batch in the array will be depleted first during sales.
+</Tip>
+
+## Related Endpoints
+
+- [Create Batch](/api/batches/create) - Receive inventory and create a new batch
+- [Batches Overview](/api/batches/overview) - Learn about batch management concepts

@@ -1,0 +1,367 @@
+---
+title: 'Authentication'
+description: 'Learn how to authenticate users in the Inventory Management System'
+icon: 'lock'
+---
+
+## Overview
+
+The Inventory Management System uses a secure authentication system that manages user login, password reset, and session management. The authentication flow is handled by the Auth module and supports future JWT token-based authentication.
+
+## Authentication Architecture
+
+The authentication system is built using a clean architecture pattern:
+
+- **Controller Layer**: `backend/Auth/Adapters/auth_controller.py`
+- **Service Layer**: `backend/Auth/Domain/auth_service.py`
+- **Middleware**: `backend/CommonLayer/middleware/auth_middleware.py`
+
+## Login Flow
+
+### Endpoint
+
+```
+POST /api/v1/auth/login
+```
+
+### Request Body
+
+```json
+{
+  "username": "admin",
+  "password": "Admin1234!"
+}
+```
+
+### Authentication Process
+
+1. **Credential Validation**: The system checks if the username exists in the database
+2. **Password Verification**: Uses `werkzeug.security.check_password_hash` to verify the password
+3. **Account Status Check**: Validates that the user account is active
+4. **User Data Response**: Returns user information on successful authentication
+
+### Response
+
+**Success (200)**
+```json
+{
+  "status": "success",
+  "message": "Login exitoso",
+  "user": {
+    "id": "uuid-string",
+    "username": "admin",
+    "email": "admin@inventoryapp.com",
+    "active": true,
+    "role_id": 1,
+    "role_name": "admin"
+  }
+}
+```
+
+**Error (401)**
+```json
+{
+  "status": "error",
+  "message": "Usuario o contraseña incorrectos."
+}
+```
+
+### Code Example
+
+From `auth_controller.py:14-46`:
+
+```python
+@router.route('/login', methods=['POST'])
+def login():
+    """Endpoint para iniciar sesión."""
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+
+        if not username or not password:
+            return jsonify({
+                "status": "error", 
+                "message": "Username y password son requeridos."
+            }), 400
+
+        db = next(get_db())
+        service = _get_service(db)
+        
+        user = service.login(username, password)
+        
+        return jsonify({
+            "status": "success",
+            "message": "Login exitoso",
+            "user": user.to_dict()
+        }), 200
+
+    except ValueError as ve:
+        return jsonify({"status": "error", "message": str(ve)}), 401
+```
+
+### Security Features
+
+<AccordionGroup>
+  <Accordion title="Password Hashing">
+    Passwords are hashed using `werkzeug.security.generate_password_hash` before storage. The system never stores plain text passwords.
+  </Accordion>
+
+  <Accordion title="Generic Error Messages">
+    Login errors return the same message "Usuario o contraseña incorrectos" to prevent user enumeration attacks.
+  </Accordion>
+
+  <Accordion title="Active Account Validation">
+    Inactive accounts cannot log in. The system returns: "Esta cuenta ha sido desactivada. Contacte a un administrador."
+  </Accordion>
+</AccordionGroup>
+
+## Password Reset Flow
+
+The system provides a secure password reset mechanism using time-limited tokens.
+
+### Step 1: Request Password Reset
+
+**Endpoint**
+```
+POST /api/v1/auth/forgot-password
+```
+
+**Request**
+```json
+{
+  "username": "user123"
+}
+```
+
+**Response** (Always 200 to prevent user enumeration)
+```json
+{
+  "status": "success",
+  "message": "Si el usuario existe, se enviará un enlace de recuperación."
+}
+```
+
+### Token Generation
+
+From `auth_service.py:42-59`:
+
+```python
+def generate_reset_token(self, username: str) -> str:
+    """Genera un token de recuperación para un usuario."""
+    user = self.user_repo.get_by_username(username)
+    if not user:
+        logger.info("Solicitud de reset para usuario no existente: '%s'.", username)
+        return None
+    
+    if not user.active:
+        logger.warning("Solicitud de reset para usuario inactivo: '%s'.", username)
+        raise ValueError("Esta cuenta ha sido desactivada. Contacte a un administrador.")
+
+    serializer = self._get_serializer()
+    token = serializer.dumps(username, salt='password-reset-salt')
+    logger.info("Token de recuperación generado para '%s'.", username)
+    return token
+```
+
+The token is generated using `itsdangerous.URLSafeTimedSerializer` with:
+- Secret key from Flask config
+- Salt: `'password-reset-salt'`
+- Default expiration: 3600 seconds (1 hour)
+
+### Step 2: Reset Password with Token
+
+**Endpoint**
+```
+POST /api/v1/auth/reset-password
+```
+
+**Request**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "new_password": "NewSecurePassword123!"
+}
+```
+
+**Response**
+```json
+{
+  "status": "success",
+  "message": "Contraseña restablecida exitosamente."
+}
+```
+
+### Token Validation
+
+From `auth_service.py:61-86`:
+
+```python
+def reset_password_with_token(self, token: str, new_password: str, max_age: int = 3600):
+    """Valida el token y actualiza la contraseña del usuario."""
+    serializer = self._get_serializer()
+    try:
+        username = serializer.loads(token, salt='password-reset-salt', max_age=max_age)
+    except SignatureExpired:
+        raise ValueError("El enlace de recuperación ha expirado. Por favor, solicite uno nuevo.")
+    except BadSignature:
+        raise ValueError("Token de recuperación inválido.")
+        
+    user = self.user_repo.get_by_username(username)
+    if not user:
+        raise ValueError("Usuario no encontrado.")
+        
+    if not user.active:
+        raise ValueError("Esta cuenta ha sido desactivada.")
+
+    user.password_hash = generate_password_hash(new_password)
+    self.user_repo.update(user)
+    return True
+```
+
+<Warning>
+  Password reset tokens expire after 1 hour. Users must request a new token if their link expires.
+</Warning>
+
+## Session Management
+
+### Current Implementation (Header-Based)
+
+The system currently uses a temporary authentication mechanism via HTTP headers:
+
+**Required Header**
+```
+X-User-Role: admin
+```
+
+From `auth_middleware.py:11-65`:
+
+```python
+def require_role(*roles):
+    """Decorador de autorización basado en rol."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            user_role = request.headers.get("X-User-Role", "").lower().strip()
+
+            if not user_role:
+                return jsonify({
+                    "status": "error",
+                    "code": 401,
+                    "error": "Unauthorized",
+                    "message": "Se requiere autenticación. Proporcione el header X-User-Role."
+                }), 401
+
+            if user_role not in VALID_ROLES:
+                return jsonify({
+                    "status": "error",
+                    "code": 403,
+                    "error": "Forbidden",
+                    "message": f"Rol '{user_role}' no reconocido."
+                }), 403
+
+            allowed = [r.lower() for r in roles]
+            if user_role not in allowed:
+                return jsonify({
+                    "status": "error",
+                    "code": 403,
+                    "error": "Forbidden",
+                    "message": f"El rol '{user_role}' no tiene permiso para acceder a este recurso."
+                }), 403
+
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
+```
+
+### Valid Roles
+
+From `auth_middleware.py:8`:
+```python
+VALID_ROLES = {"admin", "gestor", "consultor"}
+```
+
+<Info>
+  This header-based authentication is temporary. JWT token authentication will be implemented in Epic 3.2.
+</Info>
+
+### Future: JWT Token-Based Authentication
+
+The system is designed to support JWT tokens. When implemented:
+
+1. Login will return a JWT token containing user claims (id, username, role)
+2. The `@require_role` decorator will extract the role from the JWT token instead of headers
+3. Tokens will have configurable expiration times
+4. Refresh token mechanism for extended sessions
+
+## User Flow Screenshots
+
+<Steps>
+  <Step title="Login Screen">
+    User enters username and password credentials. The form validates required fields before submission.
+  </Step>
+
+  <Step title="Authentication">
+    System validates credentials against the database, checks password hash, and verifies account status.
+  </Step>
+
+  <Step title="Successful Login">
+    User is redirected to dashboard with their role-specific permissions activated.
+  </Step>
+
+  <Step title="Password Reset Request">
+    User clicks "Forgot Password" and enters their username. System sends reset link via email (currently mocked).
+  </Step>
+
+  <Step title="Reset Link">
+    User receives email with reset link: `http://localhost:5173/reset-password?token=<token>`
+  </Step>
+
+  <Step title="New Password">
+    User enters new password. System validates token and updates password hash in database.
+  </Step>
+</Steps>
+
+## Error Handling
+
+| Error Code | Scenario | Message |
+|------------|----------|----------|
+| 400 | Missing credentials | "Username y password son requeridos." |
+| 401 | Invalid credentials | "Usuario o contraseña incorrectos." |
+| 401 | Inactive account | "Esta cuenta ha sido desactivada. Contacte a un administrador." |
+| 401 | Missing auth header | "Se requiere autenticación. Proporcione el header X-User-Role." |
+| 400 | Invalid reset token | "Token de recuperación inválido." |
+| 400 | Expired reset token | "El enlace de recuperación ha expirado. Por favor, solicite uno nuevo." |
+| 500 | Server error | "Error interno del servidor" |
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Password Requirements" icon="shield-halved">
+    Enforce strong passwords with minimum length, uppercase, lowercase, numbers, and special characters.
+  </Card>
+
+  <Card title="Token Expiration" icon="clock">
+    Reset tokens expire after 1 hour. Always validate token age before accepting password resets.
+  </Card>
+
+  <Card title="Account Lockout" icon="lock">
+    Consider implementing account lockout after multiple failed login attempts to prevent brute force attacks.
+  </Card>
+
+  <Card title="Audit Logging" icon="file-lines">
+    All authentication events are logged for security auditing and compliance.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Roles & Permissions" href="/users/roles-permissions" icon="user-shield">
+    Learn about the three user roles and their permissions
+  </Card>
+
+  <Card title="User Management" href="/users/user-management" icon="users">
+    Create and manage user accounts
+  </Card>
+</CardGroup>

@@ -1,0 +1,159 @@
+---
+title: "Update Prices"
+api: "POST /api/v1/products/update-prices"
+description: "Bulk update product prices with automatic price history tracking"
+---
+
+## Authorization
+
+Required roles: `admin`, `gestor`
+
+## Request Body
+
+The endpoint accepts an array of price update objects. Each update object includes:
+
+<ParamField body="product_id" type="string" required>
+  UUID of the product to update
+</ParamField>
+
+<ParamField body="new_price" type="number" required>
+  New suggested price for the product
+</ParamField>
+
+<ParamField body="reason" type="string" default="Massive update">
+  Explanation for the price change (stored in price history)
+</ParamField>
+
+## Response
+
+<ResponseField name="message" type="string">
+  Summary of how many products were updated
+</ResponseField>
+
+## Behavior
+
+- Only updates products where the new price differs from the current price
+- Automatically creates price history records for each change
+- Skips products that don't exist or have the same price
+- Returns count of successfully updated products
+
+## Example Request
+
+```bash
+curl -X POST https://api.example.com/api/v1/products/update-prices \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '[
+    {
+      "product_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "new_price": 5.49,
+      "reason": "Seasonal price increase"
+    },
+    {
+      "product_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "new_price": 0.30,
+      "reason": "Supplier cost adjustment"
+    },
+    {
+      "product_id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+      "new_price": 12.99,
+      "reason": "Market price correction"
+    }
+  ]'
+```
+
+## Example Response
+
+```json
+{
+  "message": "Updated 3 product prices successfully"
+}
+```
+
+## Example: Single Product Update
+
+You can also update a single product by passing a one-item array:
+
+```bash
+curl -X POST https://api.example.com/api/v1/products/update-prices \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '[
+    {
+      "product_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "new_price": 5.99,
+      "reason": "Premium quality upgrade"
+    }
+  ]'
+```
+
+## Price History Tracking
+
+Each price update automatically creates a price history entry with:
+
+- Old price (current price before update)
+- New price (requested price)
+- Reason for change
+- Timestamp of change
+
+You can view the complete price history using the [Price History endpoint](/api/products/price-history).
+
+## Error Responses
+
+<ResponseField name="error" type="string">
+  Error message describing what went wrong
+</ResponseField>
+
+### 400 Bad Request
+
+Returned when request body is not an array:
+
+```json
+{
+  "error": "Expected a list of updates"
+}
+```
+
+### 401 Unauthorized
+
+Returned when authentication token is invalid or missing.
+
+### 403 Forbidden
+
+Returned when the authenticated user lacks required role (`admin` or `gestor`).
+
+## Use Cases
+
+### Seasonal Price Adjustments
+
+Update multiple products at once for seasonal promotions:
+
+```json
+[
+  {"product_id": "id1", "new_price": 3.99, "reason": "Summer sale"},
+  {"product_id": "id2", "new_price": 7.49, "reason": "Summer sale"},
+  {"product_id": "id3", "new_price": 12.99, "reason": "Summer sale"}
+]
+```
+
+### Supplier Cost Changes
+
+Reflect wholesale price changes across product categories:
+
+```json
+[
+  {"product_id": "id1", "new_price": 15.00, "reason": "Supplier cost increase"},
+  {"product_id": "id2", "new_price": 22.50, "reason": "Supplier cost increase"}
+]
+```
+
+### Market Corrections
+
+Align prices with market conditions:
+
+```json
+[
+  {"product_id": "id1", "new_price": 9.99, "reason": "Competitor price matching"},
+  {"product_id": "id2", "new_price": 14.99, "reason": "Market analysis adjustment"}
+]
+```

@@ -1,0 +1,313 @@
+---
+title: 'Architecture Overview'
+description: 'Full-stack architecture of the Inventory Management System'
+---
+
+## System Architecture
+
+The Inventory Management System is a full-stack web application built with a modern, maintainable architecture that separates concerns and follows industry best practices.
+
+### Technology Stack
+
+#### Backend
+- **Framework**: Flask (Python)
+- **ORM**: SQLAlchemy
+- **Database**: SQLite (development)
+- **API Style**: RESTful JSON API
+- **Authentication**: JWT tokens
+- **Middleware**: CORS, Exception Handling, Logging
+
+#### Frontend
+- **Framework**: React 19.2
+- **Build Tool**: Vite 7
+- **Styling**: Tailwind CSS 4.2
+- **Architecture**: Hexagonal Architecture (Ports & Adapters)
+- **State Management**: Custom hooks with application layer
+
+### High-Level Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Client Browser                          │
+│                     (React Frontend)                         │
+└──────────────────────┬──────────────────────────────────────┘
+                       │ HTTP/JSON
+                       │ API Calls
+                       ↓
+┌─────────────────────────────────────────────────────────────┐
+│                    Flask Backend API                         │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │              Application Routes                      │   │
+│  │  (Controllers / Blueprints)                          │   │
+│  └────────────────────┬────────────────────────────────┘   │
+│                       │                                      │
+│  ┌────────────────────┴────────────────────────────────┐   │
+│  │         Domain Layer (Business Logic)               │   │
+│  │  - Product, Batch, Movement                         │   │
+│  │  - User, Role, Auth Service                          │   │
+│  │  - Supplier, Customer                                │   │
+│  │  - Audit Log                                         │   │
+│  └────────────────────┬────────────────────────────────┘   │
+│                       │                                      │
+│  ┌────────────────────┴────────────────────────────────┐   │
+│  │      Repository Layer (Data Access)                 │   │
+│  │  SQLAlchemy ORM                                      │   │
+│  └────────────────────┬────────────────────────────────┘   │
+└───────────────────────┼──────────────────────────────────────┘
+                       │
+                       ↓
+           ┌───────────────────────┐
+           │   SQLite Database     │
+           │   (inventory.db)      │
+           └───────────────────────┘
+```
+
+## Directory Structure
+
+### Backend Structure
+
+```
+backend/
+├── Audit/                    # Audit logging module
+│   ├── Adapters/            # Controllers and repositories
+│   ├── Domain/              # Audit log domain model
+│   └── Ports/               # Repository interfaces
+├── Auth/                    # Authentication module
+│   ├── Adapters/            # Controllers, JWT provider, email provider
+│   ├── Domain/              # Auth service, token models
+│   └── Ports/               # Provider interfaces
+├── Product/                 # Product management module
+│   ├── Adapters/            # Controllers and repositories
+│   ├── Domain/              # Product, Batch, Movement models
+│   └── Ports/               # Repository interfaces
+├── Stakeholder/             # Customer & Supplier module
+│   ├── Adapters/            # Controllers and repositories
+│   ├── Domain/              # Customer, Supplier models
+│   └── Ports/               # Repository interfaces
+├── User/                    # User management module
+│   ├── Adapters/            # Controllers and repositories
+│   ├── Domain/              # User, Role models and services
+│   └── Ports/               # Repository interfaces
+├── Report/                  # Reporting module
+│   ├── Adapters/            # Report controllers
+│   ├── Domain/              # Report services
+│   └── Ports/               # Report interfaces
+├── CommonLayer/             # Shared utilities
+│   ├── domain/              # AuditableEntity base class
+│   ├── middleware/          # Auth, logging, exception handling
+│   ├── schemas/             # Common validation schemas
+│   ├── utils/               # Date, currency, SKU utilities
+│   └── logging/             # Logger configuration
+├── Database/                # Database configuration
+│   ├── config.py            # SQLAlchemy setup
+│   └── __init__.py
+├── tests/                   # Test suite
+└── main.py                  # Application entry point
+```
+
+### Frontend Structure
+
+```
+frontend/src/
+├── Audit/                   # Audit module (Hexagonal)
+│   ├── Adapters/           # API adapters
+│   ├── Application/        # Use cases and hooks
+│   ├── Domain/             # Domain models
+│   ├── Ports/              # Repository interfaces
+│   └── UI/                 # Components and pages
+├── Auth/                   # Authentication module
+│   └── [same structure]
+├── Product/                # Product management module
+│   └── [same structure]
+├── Stakeholder/            # Stakeholder module
+│   └── [same structure]
+├── Report/                 # Reporting module
+│   └── [same structure]
+├── CommonLayer/            # Shared resources
+│   ├── components/         # Reusable UI components
+│   ├── config/             # Axios instance, API config
+│   ├── hooks/              # Common React hooks
+│   └── utils/              # Utility functions
+├── Router/                 # Application routing
+└── assets/                 # Static assets
+```
+
+## Key Architectural Decisions
+
+### 1. Modular Design
+
+The system is organized into **bounded contexts** (modules) that align with business domains:
+- **Product**: Core inventory tracking
+- **Stakeholder**: Customer and supplier management
+- **User**: Authentication and authorization
+- **Audit**: Activity logging
+- **Report**: Business intelligence
+
+Each module is self-contained with its own domain models, business logic, and data access layer.
+
+### 2. Hexagonal Architecture (Ports & Adapters)
+
+Both backend and frontend follow the **Hexagonal Architecture** pattern (see [Hexagonal Design](/architecture/hexagonal-design) for details):
+
+- **Domain**: Business logic and entities (framework-agnostic)
+- **Ports**: Interfaces defining contracts
+- **Adapters**: Concrete implementations (Flask controllers, SQLAlchemy repositories, React components)
+
+### 3. Separation of Concerns
+
+**Backend Layers**:
+1. **Controllers** (Adapters): Handle HTTP requests, validate input, return responses
+2. **Domain Services**: Implement business logic
+3. **Repositories** (Adapters): Manage data persistence
+4. **Models**: Define database schema and relationships
+
+**Frontend Layers**:
+1. **UI Layer**: React components and pages
+2. **Application Layer**: Use cases and custom hooks
+3. **Domain Layer**: Business models and validation
+4. **Adapters**: API communication
+5. **Ports**: Interface contracts
+
+### 4. RESTful API Design
+
+The backend exposes RESTful endpoints organized by module:
+
+```
+/api/v1/products/          # Product CRUD
+/api/v1/batches/           # Batch management
+/api/v1/movements/         # Inventory movements
+/api/v1/customers/         # Customer management
+/api/v1/suppliers/         # Supplier management
+/api/v1/reports/           # Report generation
+/api/v1/audit/             # Audit logs
+/api/v1/users/             # User management
+/api/auth/                 # Authentication
+```
+
+### 5. Authentication & Authorization
+
+- **JWT-based authentication**: Stateless token authentication
+- **Role-based access control**: Three roles (Admin, Gestor, Consultor)
+- **Middleware protection**: `@require_role` decorator on endpoints
+- **Password reset**: Token-based email flow
+
+See `backend/CommonLayer/middleware/auth_middleware.py:1`
+
+### 6. Audit Trail
+
+All domain entities inherit from `AuditableEntity` which provides:
+- `created_at`, `created_by`: Track entity creation
+- `updated_at`, `updated_by`: Track modifications
+- Automatic timestamp management via SQLAlchemy hooks
+
+See `backend/CommonLayer/domain/autitable_entity.py:1`
+
+### 7. Database Schema
+
+SQLAlchemy ORM with declarative base mapping:
+- **Automatic migrations**: Not implemented (manual schema evolution)
+- **Relationships**: One-to-many, many-to-one with cascade operations
+- **Indexes**: Strategic indexing on foreign keys and lookup fields
+
+See [Database Schema](/architecture/database-schema) for complete details.
+
+## Data Flow Example
+
+### Creating a New Product
+
+**Frontend Flow**:
+```
+UI Component (ProductForm.jsx)
+     ↓ (calls hook)
+Application Layer (useProductActions.js)
+     ↓ (calls adapter)
+Adapter (ApiProductRepository.js)
+     ↓ (HTTP POST)
+Backend API
+```
+
+**Backend Flow**:
+```
+Flask Route (product_controller.py:create_product)
+     ↓ (validates request)
+     ↓ (creates domain entity)
+Repository (ProductRepository)
+     ↓ (persists to DB)
+SQLAlchemy ORM
+     ↓
+SQLite Database
+```
+
+## Cross-Cutting Concerns
+
+### Logging
+
+- Centralized logger: `CommonLayer.logging.logger`
+- Request/response logging middleware
+- Error logging with stack traces
+
+### Exception Handling
+
+- Global exception handler catches all unhandled errors
+- Returns consistent JSON error responses
+- Logs errors with context
+
+See `backend/CommonLayer/middleware/exception_handler.py:1`
+
+### CORS Configuration
+
+```python
+CORS(app, resources={r"/api/*": {"origins": "*"}})
+```
+
+Allows all origins for development (should be restricted in production).
+
+## Scalability Considerations
+
+### Current Architecture
+- **Monolithic**: Single Flask application
+- **SQLite**: File-based database
+- **Synchronous**: Blocking I/O operations
+
+### Future Enhancements
+- **Database**: Migrate to PostgreSQL or MySQL for production
+- **Caching**: Add Redis for session management and query caching
+- **Async**: Migrate to async Flask or FastAPI
+- **Microservices**: Split modules into independent services
+- **Message Queue**: Add RabbitMQ/Kafka for async operations
+- **API Gateway**: Add rate limiting and load balancing
+
+## Security Features
+
+1. **Password Hashing**: Werkzeug security helpers
+2. **JWT Tokens**: Secure, stateless authentication
+3. **Role-based Access**: Fine-grained endpoint protection
+4. **Input Validation**: Request data validation
+5. **SQL Injection Protection**: SQLAlchemy parameterized queries
+6. **CORS**: Controlled cross-origin access
+
+## Development Workflow
+
+1. **Backend Development**:
+   ```bash
+   cd backend
+   python main.py  # Starts Flask on port 8000
+   ```
+
+2. **Frontend Development**:
+   ```bash
+   cd frontend
+   npm run dev  # Starts Vite dev server
+   ```
+
+3. **Testing**:
+   ```bash
+   cd backend
+   pytest tests/
+   ```
+
+## Related Documentation
+
+- [Hexagonal Design](/architecture/hexagonal-design) - Deep dive into Ports & Adapters pattern
+- [Database Schema](/architecture/database-schema) - Complete database structure
+- [API Reference](/api-reference) - Full API documentation

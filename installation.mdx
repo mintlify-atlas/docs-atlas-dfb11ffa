@@ -1,0 +1,547 @@
+---
+title: Installation
+description: Detailed installation and configuration guide for the Inventory Management System
+---
+
+This guide provides comprehensive installation instructions for deploying the Inventory Management System in development and production environments.
+
+## System requirements
+
+### Backend requirements
+
+- **Python:** 3.8 or higher
+- **Operating System:** Linux, macOS, or Windows
+- **Memory:** Minimum 512MB RAM
+- **Storage:** 100MB for application and database
+
+### Frontend requirements
+
+- **Node.js:** 18.0 or higher
+- **npm:** 9.0 or higher (or yarn/pnpm equivalent)
+- **Modern web browser:** Chrome, Firefox, Safari, or Edge
+
+## Installation methods
+
+<Tabs>
+  <Tab title="Development">
+    ## Development installation
+
+    This setup is ideal for local development and testing.
+
+    ### Step 1: Clone the repository
+
+    ```bash
+    git clone <your-repository-url>
+    cd inventory-management-system
+    ```
+
+    ### Step 2: Backend setup
+
+    <Steps>
+      <Step title="Create a virtual environment">
+        ```bash
+        cd backend
+        python -m venv venv
+        ```
+
+        Activate the virtual environment:
+        <CodeGroup>
+        ```bash Linux/macOS
+        source venv/bin/activate
+        ```
+        ```bash Windows (CMD)
+        venv\Scripts\activate.bat
+        ```
+        ```bash Windows (PowerShell)
+        venv\Scripts\Activate.ps1
+        ```
+        </CodeGroup>
+      </Step>
+
+      <Step title="Install dependencies">
+        ```bash
+        pip install -r requirements.txt
+        ```
+
+        Key dependencies installed:
+        - **Flask 3.1.1** - Web framework
+        - **SQLAlchemy 2.0.41** - ORM for database operations
+        - **Flask-CORS 6.0.0** - Cross-origin resource sharing
+        - **Flask-JWT-Extended 4.7.1** - JWT authentication support
+        - **bcrypt 4.3.0** - Password hashing
+        - **python-dotenv 1.1.1** - Environment variable management
+      </Step>
+
+      <Step title="Database initialization">
+        The database is automatically created when you first run the application:
+        ```bash
+        python main.py
+        ```
+
+        This will:
+        - Create the SQLite database file `inventory.db`
+        - Generate all required tables
+        - Seed initial roles (admin, gestor, consultor)
+        - Create the default admin user
+
+        <Note>
+          The database file is created in the `backend` directory by default.
+        </Note>
+      </Step>
+    </Steps>
+
+    ### Step 3: Frontend setup
+
+    <Steps>
+      <Step title="Install Node.js dependencies">
+        ```bash
+        cd frontend
+        npm install
+        ```
+
+        Key dependencies:
+        - **React 19.2.0** - UI framework
+        - **Vite 7.3.1** - Build tool and dev server
+        - **Tailwind CSS 4.2.1** - Utility-first CSS framework
+      </Step>
+
+      <Step title="Start the development server">
+        ```bash
+        npm run dev
+        ```
+
+        The application will be available at `http://localhost:5173`
+      </Step>
+    </Steps>
+
+    ### Step 4: Verify installation
+
+    <Steps>
+      <Step title="Check backend health">
+        ```bash
+        curl http://localhost:8000/api/health
+        ```
+
+        Expected response:
+        ```json
+        {"status": "ok", "service": "inventory-api"}
+        ```
+      </Step>
+
+      <Step title="Access the frontend">
+        Open `http://localhost:5173` and log in with:
+        - **Username:** `admin`
+        - **Password:** `Admin1234!`
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Production">
+    ## Production installation
+
+    For production deployments, additional security and performance configurations are required.
+
+    <Warning>
+      Never use the default admin password in production. Change it immediately after initial setup.
+    </Warning>
+
+    ### Backend production setup
+
+    <Steps>
+      <Step title="Install dependencies with production settings">
+        ```bash
+        pip install -r requirements.txt --no-dev
+        ```
+      </Step>
+
+      <Step title="Configure environment variables">
+        Create a `.env` file in the `backend` directory:
+
+        ```bash
+        # Flask configuration
+        FLASK_ENV=production
+        SECRET_KEY=your-secure-secret-key-here
+        
+        # Database
+        SQLALCHEMY_DATABASE_URL=sqlite:///./inventory.db
+        
+        # Server
+        HOST=0.0.0.0
+        PORT=8000
+        
+        # CORS (restrict to your frontend domain)
+        CORS_ORIGINS=https://your-frontend-domain.com
+        ```
+
+        <Warning>
+          Generate a strong `SECRET_KEY` using:
+          ```bash
+          python -c "import secrets; print(secrets.token_hex(32))"
+          ```
+        </Warning>
+      </Step>
+
+      <Step title="Use a production WSGI server">
+        Install Gunicorn:
+        ```bash
+        pip install gunicorn
+        ```
+
+        Run the application:
+        ```bash
+        gunicorn -w 4 -b 0.0.0.0:8000 main:app
+        ```
+
+        For production, use a process manager like systemd or supervisord.
+      </Step>
+
+      <Step title="Set up reverse proxy (recommended)">
+        Configure Nginx as a reverse proxy:
+
+        ```nginx
+        server {
+            listen 80;
+            server_name api.yourdomain.com;
+
+            location / {
+                proxy_pass http://localhost:8000;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+        }
+        ```
+      </Step>
+    </Steps>
+
+    ### Frontend production setup
+
+    <Steps>
+      <Step title="Build the production bundle">
+        ```bash
+        cd frontend
+        npm run build
+        ```
+
+        This creates an optimized production build in the `dist` directory.
+      </Step>
+
+      <Step title="Serve static files">
+        Option 1: Use a static file server like Nginx:
+        ```nginx
+        server {
+            listen 80;
+            server_name yourdomain.com;
+            root /path/to/frontend/dist;
+            index index.html;
+
+            location / {
+                try_files $uri $uri/ /index.html;
+            }
+        }
+        ```
+
+        Option 2: Use the preview server for testing:
+        ```bash
+        npm run preview
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Configuration
+
+### Backend configuration
+
+The backend is configured through `backend/main.py` and `backend/Database/config.py`.
+
+#### Database configuration
+
+By default, the system uses SQLite:
+
+```python
+SQLALCHEMY_DATABASE_URL = "sqlite:///./inventory.db"
+```
+
+<Tip>
+  For production, you may want to use PostgreSQL or MySQL. Update the connection string in `Database/config.py`:
+  
+  ```python
+  # PostgreSQL example
+  SQLALCHEMY_DATABASE_URL = "postgresql://user:password@localhost/inventory_db"
+  
+  # MySQL example
+  SQLALCHEMY_DATABASE_URL = "mysql+pymysql://user:password@localhost/inventory_db"
+  ```
+</Tip>
+
+#### Secret key configuration
+
+The secret key is used for password reset tokens. In production, set this via environment variable:
+
+```python
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-fallback-secret')
+```
+
+#### CORS configuration
+
+CORS is configured in `main.py:31`:
+
+```python
+CORS(app, resources={r"/api/*": {"origins": "*"}})
+```
+
+For production, restrict origins:
+
+```python
+CORS(app, resources={r"/api/*": {"origins": "https://your-domain.com"}})
+```
+
+### Frontend configuration
+
+The frontend uses Vite for building and development. Configuration is in `frontend/vite.config.js`.
+
+#### API endpoint configuration
+
+Update the API base URL in your API client configuration to point to your backend:
+
+```javascript
+const API_BASE_URL = import.meta.env.PROD 
+  ? 'https://api.yourdomain.com'
+  : 'http://localhost:8000';
+```
+
+## Database management
+
+### Automatic initialization
+
+On first run, the application automatically:
+
+1. Creates all database tables
+2. Seeds three predefined roles:
+   - **admin** - Full system access
+   - **gestor** - Inventory management access
+   - **consultor** - Read-only access
+3. Creates the default admin user
+
+### Manual database operations
+
+The database schema is defined using SQLAlchemy models. Tables are created automatically via:
+
+```python
+Base.metadata.create_all(bind=engine)
+```
+
+This runs in `backend/main.py:27` on application startup.
+
+### Database migrations
+
+For schema changes, you can use the `alter_db.py` script:
+
+```bash
+python alter_db.py
+```
+
+<Warning>
+  Always backup your database before running migrations:
+  ```bash
+  cp inventory.db inventory.db.backup
+  ```
+</Warning>
+
+### Resetting the database
+
+To start fresh with a clean database:
+
+```bash
+cd backend
+rm inventory.db
+python main.py
+```
+
+This will recreate the database with default data.
+
+## Initial user setup
+
+The system automatically creates a default admin user:
+
+- **Username:** admin
+- **Email:** admin@inventoryapp.com
+- **Password:** Admin1234!
+- **Role:** admin
+
+This is configured in the seeding logic in `User/Domain/user_service.py`.
+
+<Warning>
+  **Security Notice:** Change the default admin password immediately after first login, especially in production environments.
+</Warning>
+
+To create additional users:
+
+1. Log in as admin
+2. Navigate to **Users** in the sidebar
+3. Click **Create User**
+4. Assign appropriate role (admin, gestor, or consultor)
+
+## Running the application
+
+### Development mode
+
+<CodeGroup>
+```bash Backend
+cd backend
+python main.py
+```
+
+```bash Frontend
+cd frontend
+npm run dev
+```
+</CodeGroup>
+
+### Production mode
+
+<CodeGroup>
+```bash Backend with Gunicorn
+cd backend
+gunicorn -w 4 -b 0.0.0.0:8000 main:app
+```
+
+```bash Frontend (build and serve)
+cd frontend
+npm run build
+npx serve -s dist -l 3000
+```
+</CodeGroup>
+
+## Logging
+
+The application includes comprehensive logging:
+
+- **Location:** `backend/logs/`
+- **Format:** Structured JSON logs with timestamps
+- **Levels:** DEBUG, INFO, WARNING, ERROR
+
+Logs include:
+- API requests and responses
+- Authentication attempts
+- Database operations
+- Error traces
+
+View logs:
+```bash
+tail -f backend/logs/app.log
+```
+
+## Security considerations
+
+<CardGroup cols={2}>
+  <Card title="Password hashing" icon="lock">
+    Passwords are hashed using bcrypt with automatic salt generation
+  </Card>
+  <Card title="Role-based access" icon="shield">
+    All endpoints are protected with role-based middleware
+  </Card>
+  <Card title="Audit logging" icon="clipboard-list">
+    All system actions are logged for compliance
+  </Card>
+  <Card title="CORS protection" icon="globe">
+    Configure allowed origins to prevent unauthorized access
+  </Card>
+</CardGroup>
+
+### Hardening checklist
+
+- [ ] Change default admin password
+- [ ] Set strong `SECRET_KEY` via environment variable
+- [ ] Configure restrictive CORS origins
+- [ ] Use HTTPS in production
+- [ ] Enable rate limiting on API endpoints
+- [ ] Regular database backups
+- [ ] Keep dependencies updated
+- [ ] Review audit logs regularly
+
+## Troubleshooting
+
+### Common issues
+
+<AccordionGroup>
+  <Accordion title="Import errors when starting backend">
+    Ensure virtual environment is activated and dependencies are installed:
+    ```bash
+    source venv/bin/activate
+    pip install -r requirements.txt
+    ```
+  </Accordion>
+
+  <Accordion title="Database locked errors">
+    SQLite has limitations with concurrent writes. For high-traffic environments, migrate to PostgreSQL or MySQL.
+  </Accordion>
+
+  <Accordion title="CORS errors in browser console">
+    Verify the backend CORS configuration includes your frontend URL:
+    ```python
+    CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}})
+    ```
+  </Accordion>
+
+  <Accordion title="Port already in use">
+    Change the port in `main.py` or kill the process using the port:
+    ```bash
+    # Find process
+    lsof -i :8000
+    # Kill process
+    kill -9 <PID>
+    ```
+  </Accordion>
+
+  <Accordion title="Frontend build fails">
+    Clear node_modules and reinstall:
+    ```bash
+    rm -rf node_modules package-lock.json
+    npm install
+    npm run build
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Health checks
+
+The system provides health check endpoints for monitoring:
+
+```bash
+# API health
+curl http://localhost:8000/api/health
+
+# Root endpoint
+curl http://localhost:8000/
+```
+
+Expected responses:
+```json
+{"status": "ok", "service": "inventory-api"}
+{"status": "ok", "message": "Inventory API is running (Flask)", "version": "1.0.0"}
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Get started with the basics
+  </Card>
+  <Card title="API Documentation" icon="book" href="/api/auth/login">
+    Explore available endpoints
+  </Card>
+  <Card title="User Management" icon="users" href="/users/user-management">
+    Set up roles and permissions
+  </Card>
+  <Card title="Deployment Guide" icon="server" href="/installation">
+    Deploy to production
+  </Card>
+</CardGroup>
+
+<Note>
+  For questions or issues, consult the application logs in `backend/logs/` or review the source code documentation.
+</Note>

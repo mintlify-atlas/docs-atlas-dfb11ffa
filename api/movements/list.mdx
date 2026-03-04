@@ -1,0 +1,214 @@
+---
+title: "List Product Movements"
+api: "GET /api/v1/movements/product/{product_id}"
+description: "Retrieve all movements for a specific product"
+---
+
+## Overview
+
+This endpoint returns the complete movement history for a product, including all entries, exits, and adjustments. Movements are ordered by creation date (most recent first).
+
+## Authentication
+
+<ParamField path="Authorization" type="string" required>
+  Bearer token with `admin`, `gestor`, or `consultor` role
+</ParamField>
+
+## Path Parameters
+
+<ParamField path="product_id" type="string" required>
+  Unique identifier of the product
+</ParamField>
+
+## Response
+
+Returns an array of movement objects:
+
+<ResponseField name="id" type="string">
+  Unique identifier for the movement
+</ResponseField>
+
+<ResponseField name="product_id" type="string">
+  Product identifier
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  Movement type: `ENTRY`, `EXIT`, or `ADJUSTMENT`
+</ResponseField>
+
+<ResponseField name="quantity" type="integer">
+  Number of units in this movement
+</ResponseField>
+
+<ResponseField name="unit_price" type="float">
+  Price per unit for this transaction
+</ResponseField>
+
+<ResponseField name="total_price" type="float">
+  Total price (quantity * unit_price)
+</ResponseField>
+
+<ResponseField name="total_cost" type="float">
+  FIFO calculated cost for EXIT movements
+</ResponseField>
+
+<ResponseField name="reference_id" type="string">
+  Reference to related entity (Batch ID, Order ID, etc.)
+</ResponseField>
+
+<ResponseField name="notes" type="string">
+  Additional information about the movement
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of when the movement was created
+</ResponseField>
+
+<ResponseField name="created_by" type="string">
+  User identifier who created the movement
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X GET https://api.example.com/api/v1/movements/product/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+## Example Response
+
+```json
+[
+  {
+    "id": "7f3d9c8e-1234-5678-90ab-cdef12345678",
+    "product_id": "550e8400-e29b-41d4-a716-446655440000",
+    "type": "EXIT",
+    "quantity": 10,
+    "unit_price": 29.99,
+    "total_price": 299.90,
+    "total_cost": 180.50,
+    "reference_id": "batch-abc-123,batch-def-456",
+    "notes": "Sold to customer ABC",
+    "created_at": "2026-03-04T10:30:00Z",
+    "created_by": "user-123"
+  },
+  {
+    "id": "6a2e8b7d-9876-5432-10fe-dcba98765432",
+    "product_id": "550e8400-e29b-41d4-a716-446655440000",
+    "type": "ENTRY",
+    "quantity": 50,
+    "unit_price": 15.00,
+    "total_price": 750.00,
+    "total_cost": null,
+    "reference_id": "batch-abc-123",
+    "notes": "Purchase Entry",
+    "created_at": "2026-03-01T08:15:00Z",
+    "created_by": "user-456"
+  },
+  {
+    "id": "5b1d7a6c-8765-4321-09ed-cba987654321",
+    "product_id": "550e8400-e29b-41d4-a716-446655440000",
+    "type": "ADJUSTMENT",
+    "quantity": -2,
+    "unit_price": null,
+    "total_price": null,
+    "total_cost": null,
+    "reference_id": null,
+    "notes": "Damaged items removed",
+    "created_at": "2026-02-28T14:20:00Z",
+    "created_by": "user-789"
+  }
+]
+```
+
+## Understanding the Response
+
+### Movement Types
+
+- **ENTRY**: Stock received, usually linked to a batch via `reference_id`
+- **EXIT**: Stock sold or removed, with FIFO cost in `total_cost`
+- **ADJUSTMENT**: Manual corrections (quantity can be negative)
+
+### Price vs Cost
+
+- `unit_price` / `total_price`: Sale price or purchase price
+- `total_cost`: Only populated for EXIT movements, shows actual COGS via FIFO
+
+### Reference IDs
+
+- For ENTRY: Contains the Batch ID created
+- For EXIT: Contains comma-separated Batch IDs that were deducted from
+- For ADJUSTMENT: May be null or contain a reference note
+
+## Error Responses
+
+<ResponseExample>
+```json 401 Unauthorized
+{
+  "error": "Unauthorized"
+}
+```
+
+```json 403 Forbidden
+{
+  "error": "Insufficient permissions"
+}
+```
+</ResponseExample>
+
+## Implementation Details
+
+From `backend/Product/Adapters/movement_controller.py:44-66`:
+
+```python
+@router.route('/product/<product_id>', methods=['GET'])
+@require_role('admin', 'gestor', 'consultor')
+def get_movements_by_product(product_id):
+    db = next(get_db())
+    repo = MovementRepository(db)
+    
+    movements = repo.get_movements_by_product(product_id)
+    result = []
+    for m in movements:
+        result.append({
+            "id": m.id,
+            "product_id": m.product_id,
+            "type": str(m.type),
+            "quantity": m.quantity,
+            "unit_price": m.unit_price,
+            "total_price": m.total_price,
+            "total_cost": m.total_cost,
+            "reference_id": m.reference_id,
+            "notes": m.notes,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+            "created_by": m.created_by
+        })
+    return jsonify(result), 200
+```
+
+The repository query from `backend/Product/Adapters/movement_repository.py:29-30`:
+
+```python
+def get_movements_by_product(self, product_id: str) -> List[Movement]:
+    return self.db.query(Movement).filter(Movement.product_id == product_id).order_by(Movement.created_at.desc()).all()
+```
+
+## Use Cases
+
+### Audit Trail
+Track all inventory changes for compliance and auditing purposes.
+
+### Profit Analysis
+Compare `total_price` vs `total_cost` on EXIT movements to calculate profit margins.
+
+### Stock Investigation
+Trace why stock levels changed over time by reviewing the movement history.
+
+### Supplier Performance
+Filter ENTRY movements by supplier (using the product's relationship) to analyze supplier reliability.
+
+## See Also
+
+- [Register Sale](/api/movements/create) - Create EXIT movements
+- [Movements Overview](/api/movements/overview) - Movement types and concepts
+- [Batches API](/api/batches/overview) - View batch-level inventory data

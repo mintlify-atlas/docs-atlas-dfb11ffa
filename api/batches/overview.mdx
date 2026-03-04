@@ -1,0 +1,94 @@
+---
+title: 'Batches Overview'
+description: 'Manage inventory batches with FIFO tracking and expiration dates'
+---
+
+## What are Batches?
+
+Batches track individual stock purchases with their associated costs, quantities, and metadata. The system uses **FIFO (First In, First Out)** logic, prioritizing items closest to expiration when processing sales.
+
+## Key Concepts
+
+### Batch Lifecycle
+
+1. **Creation**: A batch is created when receiving inventory via the `/receive` endpoint
+2. **Tracking**: Each batch maintains its available quantity separate from initial quantity
+3. **Depletion**: When products are sold, quantities are deducted from the oldest batches first
+4. **Expiration**: Batches with expiration dates are prioritized for depletion
+
+### Batch Attributes
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `id` | string | Unique batch identifier (UUID) |
+| `product_id` | string | Reference to the product |
+| `initial_quantity` | integer | Quantity received in this batch |
+| `available_quantity` | integer | Remaining quantity available for sale |
+| `unit_cost` | float | Cost per unit paid to supplier |
+| `purchase_date` | datetime | When the batch was received |
+| `expiration_date` | datetime | Optional expiration date |
+| `supplier_id` | string | Optional supplier reference |
+| `entry_transaction_ref` | string | Reference to the entry movement |
+
+## Relationship to Products
+
+Each batch belongs to exactly one product. A product can have multiple active batches simultaneously. When inventory is sold:
+
+- The system queries all active batches for the product
+- Batches are sorted by expiration date (earliest first), then purchase date
+- Quantities are deducted across batches until the order is fulfilled
+
+**Example**: If Product A has 3 batches with quantities [50, 30, 20] and you sell 60 units, the first batch is fully depleted (50) and 10 units are deducted from the second batch.
+
+## Authentication & Authorization
+
+All batch endpoints require authentication via Bearer token.
+
+### Role Requirements
+
+- **Receive Inventory** (`POST /receive`): `admin` or `gestor`
+- **List Batches** (`GET /product/{product_id}`): `admin`, `gestor`, or `consultor`
+
+<Note>
+The `consultor` role can view batches but cannot create or modify them.
+</Note>
+
+## Common Use Cases
+
+### Receiving Inventory
+
+```python
+# backend/Product/Domain/stock_service.py:18
+def register_entry(self, product_id: str, quantity: int, unit_cost: float, 
+                   supplier_id: Optional[str] = None, expiration_date: Optional[datetime] = None) -> Tuple[Batch, Movement]:
+    # Creates batch and entry movement
+    # Returns (new_batch, new_movement)
+```
+
+### Viewing Product Batches
+
+Retrieve all batches for a product to:
+- Audit inventory costs
+- Monitor expiration dates
+- Track supplier performance
+- Calculate average cost basis
+
+### FIFO Exit Processing
+
+```python
+# backend/Product/Domain/stock_service.py:57
+def register_exit(self, product_id: str, quantity: int, unit_price: Optional[float] = None, notes: str = "") -> Tuple[Movement, float]:
+    # Automatically deducts from oldest batches
+    # Returns (exit_movement, total_cost)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Create Batch" icon="box" href="/api/batches/create">
+    Receive inventory and create a new batch
+  </Card>
+  <Card title="List Batches" icon="list" href="/api/batches/list">
+    View all batches for a product
+  </Card>
+</CardGroup>

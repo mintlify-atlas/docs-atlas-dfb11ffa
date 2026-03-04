@@ -1,0 +1,474 @@
+---
+title: 'Audit Logs'
+description: 'Track and query system activity in the Inventory Management System'
+---
+
+<Note>
+All audit log endpoints require **admin** role authentication.
+</Note>
+
+## Get Audit Logs
+
+<api-endpoint method="GET" path="/api/v1/audit/logs" />
+
+Retrieve audit logs with optional filtering by user, table, or date range.
+
+### Query Parameters
+
+<ParamField query="user_id" type="string">
+  Filter logs by user ID
+</ParamField>
+
+<ParamField query="table_name" type="string">
+  Filter logs by table name (e.g., "products", "inventory")
+</ParamField>
+
+<ParamField query="start_date" type="string">
+  Start date for date range filter (format: YYYY-MM-DD)
+</ParamField>
+
+<ParamField query="end_date" type="string">
+  End date for date range filter (format: YYYY-MM-DD)
+</ParamField>
+
+<ParamField query="skip" type="integer" default="0">
+  Number of records to skip for pagination
+</ParamField>
+
+<ParamField query="limit" type="integer" default="100">
+  Maximum number of records to return
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Operation status (`success` or `error`)
+</ResponseField>
+
+<ResponseField name="count" type="integer">
+  Number of audit logs returned
+</ResponseField>
+
+<ResponseField name="logs" type="array">
+  Array of audit log entries
+  <Expandable title="Audit Log Object">
+    <ResponseField name="id" type="string">
+      Unique audit log identifier
+    </ResponseField>
+    <ResponseField name="user_id" type="string">
+      ID of the user who performed the action
+    </ResponseField>
+    <ResponseField name="user_name" type="string">
+      Username of the user who performed the action
+    </ResponseField>
+    <ResponseField name="action" type="string">
+      Type of action performed (CREATE, UPDATE, DELETE, READ)
+    </ResponseField>
+    <ResponseField name="table_name" type="string">
+      Database table affected by the action
+    </ResponseField>
+    <ResponseField name="record_id" type="string">
+      ID of the affected record
+    </ResponseField>
+    <ResponseField name="old_values" type="object">
+      Previous values before the change (for UPDATE/DELETE actions)
+    </ResponseField>
+    <ResponseField name="new_values" type="object">
+      New values after the change (for CREATE/UPDATE actions)
+    </ResponseField>
+    <ResponseField name="description" type="string">
+      Human-readable description of the action
+    </ResponseField>
+    <ResponseField name="timestamp" type="string">
+      ISO 8601 timestamp of when the action occurred
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<RequestExample>
+```bash cURL - All Logs
+curl -X GET "https://api.example.com/api/v1/audit/logs?skip=0&limit=50" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+```bash cURL - Filter by User
+curl -X GET "https://api.example.com/api/v1/audit/logs?user_id=550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+```bash cURL - Filter by Date Range
+curl -X GET "https://api.example.com/api/v1/audit/logs?start_date=2024-03-01&end_date=2024-03-31" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+```python Python
+import requests
+
+# Filter by table name
+response = requests.get(
+    "https://api.example.com/api/v1/audit/logs",
+    headers={"Authorization": "Bearer YOUR_ADMIN_TOKEN"},
+    params={
+        "table_name": "products",
+        "skip": 0,
+        "limit": 100
+    }
+)
+logs = response.json()
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200 Success
+{
+  "status": "success",
+  "count": 2,
+  "logs": [
+    {
+      "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+      "user_id": "550e8400-e29b-41d4-a716-446655440000",
+      "user_name": "admin",
+      "action": "UPDATE",
+      "table_name": "products",
+      "record_id": "prod-12345",
+      "old_values": {
+        "quantity": 100,
+        "price": 29.99
+      },
+      "new_values": {
+        "quantity": 85,
+        "price": 29.99
+      },
+      "description": "Updated product quantity after sale",
+      "timestamp": "2024-03-04T14:23:45Z"
+    },
+    {
+      "id": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+      "user_id": "660e8400-e29b-41d4-a716-446655440001",
+      "user_name": "warehouse_manager",
+      "action": "CREATE",
+      "table_name": "inventory",
+      "record_id": "inv-67890",
+      "old_values": null,
+      "new_values": {
+        "product_id": "prod-12345",
+        "warehouse_id": "wh-001",
+        "quantity": 500
+      },
+      "description": "Added new inventory batch",
+      "timestamp": "2024-03-04T10:15:30Z"
+    }
+  ]
+}
+```
+
+```json 400 Bad Request
+{
+  "error": "Invalid date format"
+}
+```
+</ResponseExample>
+
+---
+
+## Get Audit Log by ID
+
+<api-endpoint method="GET" path="/api/v1/audit/logs/{log_id}" />
+
+Retrieve detailed information about a specific audit log entry.
+
+### Path Parameters
+
+<ParamField path="log_id" type="string" required>
+  Unique identifier of the audit log
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Operation status (`success` or `error`)
+</ResponseField>
+
+<ResponseField name="log" type="object">
+  Detailed audit log object including IP address
+</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl -X GET "https://api.example.com/api/v1/audit/logs/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+```python Python
+import requests
+
+log_id = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+response = requests.get(
+    f"https://api.example.com/api/v1/audit/logs/{log_id}",
+    headers={"Authorization": "Bearer YOUR_ADMIN_TOKEN"}
+)
+log = response.json()
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200 Success
+{
+  "status": "success",
+  "log": {
+    "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "user_name": "admin",
+    "action": "UPDATE",
+    "table_name": "products",
+    "record_id": "prod-12345",
+    "old_values": {
+      "quantity": 100,
+      "price": 29.99
+    },
+    "new_values": {
+      "quantity": 85,
+      "price": 29.99
+    },
+    "description": "Updated product quantity after sale",
+    "ip_address": "192.168.1.100",
+    "timestamp": "2024-03-04T14:23:45Z"
+  }
+}
+```
+
+```json 404 Not Found
+{
+  "error": "Audit log not found"
+}
+```
+</ResponseExample>
+
+---
+
+## Create Audit Log
+
+<api-endpoint method="POST" path="/api/v1/audit/logs" />
+
+Manually create an audit log entry. This is typically used by system processes to record custom actions.
+
+### Request Body
+
+<ParamField body="user_id" type="string" required>
+  ID of the user performing the action
+</ParamField>
+
+<ParamField body="user_name" type="string">
+  Username of the user (optional)
+</ParamField>
+
+<ParamField body="action" type="string" required>
+  Type of action: CREATE, UPDATE, DELETE, or READ
+</ParamField>
+
+<ParamField body="table_name" type="string" required>
+  Name of the database table affected
+</ParamField>
+
+<ParamField body="record_id" type="string" required>
+  ID of the record affected by the action
+</ParamField>
+
+<ParamField body="old_values" type="object">
+  Previous values (for UPDATE/DELETE actions)
+</ParamField>
+
+<ParamField body="new_values" type="object">
+  New values (for CREATE/UPDATE actions)
+</ParamField>
+
+<ParamField body="description" type="string">
+  Human-readable description of the action
+</ParamField>
+
+<ParamField body="ip_address" type="string">
+  IP address from which the action was performed
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Operation status (`success` or `error`)
+</ResponseField>
+
+<ResponseField name="id" type="string">
+  ID of the created audit log entry
+</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl -X POST "https://api.example.com/api/v1/audit/logs" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "user_name": "admin",
+    "action": "DELETE",
+    "table_name": "products",
+    "record_id": "prod-99999",
+    "old_values": {
+      "name": "Obsolete Product",
+      "quantity": 0
+    },
+    "description": "Removed discontinued product",
+    "ip_address": "192.168.1.100"
+  }'
+```
+
+```python Python
+import requests
+
+data = {
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "user_name": "admin",
+    "action": "DELETE",
+    "table_name": "products",
+    "record_id": "prod-99999",
+    "old_values": {
+        "name": "Obsolete Product",
+        "quantity": 0
+    },
+    "description": "Removed discontinued product",
+    "ip_address": "192.168.1.100"
+}
+
+response = requests.post(
+    "https://api.example.com/api/v1/audit/logs",
+    headers={
+        "Authorization": "Bearer YOUR_ADMIN_TOKEN",
+        "Content-Type": "application/json"
+    },
+    json=data
+)
+result = response.json()
+```
+</RequestExample>
+
+<ResponseExample>
+```json 201 Created
+{
+  "status": "success",
+  "id": "c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f"
+}
+```
+
+```json 400 Bad Request
+{
+  "error": "Missing required fields"
+}
+```
+</ResponseExample>
+
+---
+
+## Get Audit Summary
+
+<api-endpoint method="GET" path="/api/v1/audit/summary" />
+
+Retrieve aggregated statistics about audit logs, grouped by table, user, and action type.
+
+### Response
+
+<ResponseField name="status" type="string">
+  Operation status (`success` or `error`)
+</ResponseField>
+
+<ResponseField name="total_logs" type="integer">
+  Total number of audit log entries
+</ResponseField>
+
+<ResponseField name="by_table" type="object">
+  Count of actions per table name
+</ResponseField>
+
+<ResponseField name="by_user" type="object">
+  Count of actions per user
+</ResponseField>
+
+<ResponseField name="by_action" type="object">
+  Count of actions per action type (CREATE, UPDATE, DELETE, READ)
+</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl -X GET "https://api.example.com/api/v1/audit/summary" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    "https://api.example.com/api/v1/audit/summary",
+    headers={"Authorization": "Bearer YOUR_ADMIN_TOKEN"}
+)
+summary = response.json()
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200 Success
+{
+  "status": "success",
+  "total_logs": 1543,
+  "by_table": {
+    "products": 823,
+    "inventory": 456,
+    "warehouses": 189,
+    "users": 75
+  },
+  "by_user": {
+    "admin": 412,
+    "warehouse_manager": 687,
+    "operator_1": 298,
+    "operator_2": 146
+  },
+  "by_action": {
+    "CREATE": 345,
+    "UPDATE": 982,
+    "DELETE": 87,
+    "READ": 129
+  }
+}
+```
+</ResponseExample>
+
+---
+
+## Action Types
+
+Audit logs track the following action types:
+
+<AccordionGroup>
+  <Accordion title="CREATE">
+    Records the creation of new records. The `new_values` field contains the initial data of the created record.
+  </Accordion>
+  
+  <Accordion title="UPDATE">
+    Records modifications to existing records. Both `old_values` and `new_values` are populated to show what changed.
+  </Accordion>
+  
+  <Accordion title="DELETE">
+    Records deletion of records. The `old_values` field contains the data that was deleted.
+  </Accordion>
+  
+  <Accordion title="READ">
+    Records access to sensitive data. Used for compliance and security monitoring.
+  </Accordion>
+</AccordionGroup>
+
+## Common Tables
+
+Audit logs commonly track changes to these tables:
+
+- `products` - Product catalog changes
+- `inventory` - Stock level modifications
+- `warehouses` - Warehouse configuration changes
+- `users` - User account modifications
+- `movements` - Inventory movement records
+- `transactions` - Transaction history

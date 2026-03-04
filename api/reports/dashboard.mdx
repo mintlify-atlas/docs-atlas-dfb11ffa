@@ -1,0 +1,195 @@
+---
+title: Dashboard Reports
+description: Dashboard metrics and summary endpoints for inventory overview
+---
+
+## Get Dashboard Summary
+
+<Card title="GET /api/v1/reports/dashboard" icon="chart-line">
+  Retrieves a comprehensive dashboard summary with all key performance indicators.
+</Card>
+
+### Query Parameters
+
+<ParamField query="low_stock_threshold" type="integer" default="10">
+  Threshold value to identify products with low stock levels
+</ParamField>
+
+### Authorization
+
+Requires one of the following roles:
+- `admin`
+- `gestor`
+- `consultor`
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "total_inventory_value": 150000.50,
+    "low_stock_count": 5,
+    "recent_movements_count": 25,
+    "rotation_metrics": {...}
+  }
+}
+```
+
+### Code Reference
+
+Implemented in `backend/Report/Adapters/report_controller.py:16`
+
+---
+
+## Get Inventory Value
+
+<Card title="GET /api/v1/reports/dashboard/inventory-value" icon="dollar-sign">
+  Retrieves the total value of all inventory.
+</Card>
+
+### Authorization
+
+Requires one of the following roles:
+- `admin`
+- `gestor`
+- `consultor`
+
+### Response
+
+```json
+{
+  "status": "success",
+  "total_value": 150000.50,
+  "currency": "Bs"
+}
+```
+
+### Code Reference
+
+Implemented in `backend/Report/Adapters/report_controller.py:35`
+
+---
+
+## Get Low Stock Products
+
+<Card title="GET /api/v1/reports/dashboard/low-stock" icon="triangle-exclamation">
+  Retrieves products with stock levels below the specified threshold.
+</Card>
+
+### Query Parameters
+
+<ParamField query="threshold" type="integer" default="10">
+  Minimum stock quantity threshold. Products below this value are returned.
+</ParamField>
+
+### Authorization
+
+Requires one of the following roles:
+- `admin`
+- `gestor`
+- `consultor`
+
+### Response
+
+```json
+{
+  "status": "success",
+  "threshold": 10,
+  "products": [
+    {
+      "product_id": "123e4567-e89b-12d3-a456-426614174000",
+      "product_name": "Product A",
+      "sku": "SKU-001",
+      "current_stock": 5,
+      "threshold": 10
+    }
+  ]
+}
+```
+
+### Code Reference
+
+Implemented in `backend/Report/Adapters/report_controller.py:53`
+
+---
+
+## Get Recent Movements
+
+<Card title="GET /api/v1/reports/dashboard/recent-movements" icon="clock-rotate-left">
+  Retrieves the most recent inventory movements.
+</Card>
+
+### Query Parameters
+
+<ParamField query="limit" type="integer" default="10">
+  Maximum number of recent movements to return
+</ParamField>
+
+### Authorization
+
+Requires one of the following roles:
+- `admin`
+- `gestor`
+- `consultor`
+
+### Response
+
+```json
+{
+  "status": "success",
+  "movements": [
+    {
+      "movement_id": "123e4567-e89b-12d3-a456-426614174000",
+      "product_name": "Product A",
+      "movement_type": "ENTRY",
+      "quantity": 50,
+      "timestamp": "2026-03-04T10:30:00Z",
+      "user": "John Doe"
+    }
+  ]
+}
+```
+
+### Code Reference
+
+Implemented in `backend/Report/Adapters/report_controller.py:73`
+
+---
+
+## Get Rotation Summary
+
+<Card title="GET /api/v1/reports/dashboard/rotation" icon="rotate">
+  Retrieves inventory rotation summary for the specified period.
+</Card>
+
+### Query Parameters
+
+<ParamField query="days" type="integer" default="30">
+  Number of days to calculate rotation metrics
+</ParamField>
+
+### Authorization
+
+Requires one of the following roles:
+- `admin`
+- `gestor`
+- `consultor`
+
+### Response
+
+```json
+{
+  "status": "success",
+  "rotation": {
+    "average_rotation_days": 15.5,
+    "fast_moving_products": 12,
+    "slow_moving_products": 8,
+    "period_days": 30
+  }
+}
+```
+
+### Code Reference
+
+Implemented in `backend/Report/Adapters/report_controller.py:92`

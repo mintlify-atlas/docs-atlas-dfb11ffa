@@ -1,0 +1,144 @@
+---
+title: "Create Product"
+api: "POST /api/v1/products/"
+description: "Create a new product in the inventory system"
+---
+
+## Authorization
+
+Required roles: `admin`, `gestor`
+
+## Request Body
+
+<ParamField body="sku" type="string" required>
+  Stock Keeping Unit - must be unique across all products
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Product name
+</ParamField>
+
+<ParamField body="description" type="string">
+  Detailed description of the product
+</ParamField>
+
+<ParamField body="category" type="string" required>
+  Product category (e.g., "Electronics", "Food", "Clothing")
+</ParamField>
+
+<ParamField body="unit_measure" type="string" required>
+  Unit of measurement (e.g., "kg", "liters", "units", "boxes")
+</ParamField>
+
+<ParamField body="unit_value" type="number" default="1.0">
+  Value per unit for fractional quantities
+</ParamField>
+
+<ParamField body="is_perishable" type="boolean" default="false">
+  Whether the product has an expiration date
+</ParamField>
+
+<ParamField body="expiration_date" type="string">
+  Expiration date for perishable products (ISO format or string)
+</ParamField>
+
+<ParamField body="suggested_price" type="number" default="0">
+  Recommended selling price for the product
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="string">
+  Generated UUID for the product
+</ResponseField>
+
+<ResponseField name="sku" type="string">
+  Stock Keeping Unit
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Product name
+</ResponseField>
+
+<ResponseField name="category" type="string">
+  Product category
+</ResponseField>
+
+<ResponseField name="unit_measure" type="string">
+  Unit of measurement
+</ResponseField>
+
+<ResponseField name="unit_value" type="number">
+  Value per unit
+</ResponseField>
+
+<ResponseField name="is_perishable" type="boolean">
+  Perishable status
+</ResponseField>
+
+<ResponseField name="expiration_date" type="string">
+  Expiration date if applicable
+</ResponseField>
+
+<ResponseField name="suggested_price" type="number">
+  Recommended selling price
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST https://api.example.com/api/v1/products/ \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sku": "PROD-001",
+    "name": "Organic Apples",
+    "description": "Fresh organic apples from local farms",
+    "category": "Fruits",
+    "unit_measure": "kg",
+    "unit_value": 1.0,
+    "is_perishable": true,
+    "expiration_date": "2026-03-15",
+    "suggested_price": 4.99
+  }'
+```
+
+## Example Response
+
+```json
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "sku": "PROD-001",
+  "name": "Organic Apples",
+  "category": "Fruits",
+  "unit_measure": "kg",
+  "unit_value": 1.0,
+  "is_perishable": true,
+  "expiration_date": "2026-03-15",
+  "suggested_price": 4.99
+}
+```
+
+## Error Responses
+
+<ResponseField name="error" type="string">
+  Error message describing what went wrong
+</ResponseField>
+
+### 400 Bad Request
+
+Returned when required fields are missing:
+
+```json
+{
+  "error": "Missing required fields"
+}
+```
+
+### 401 Unauthorized
+
+Returned when authentication token is invalid or missing.
+
+### 403 Forbidden
+
+Returned when the authenticated user lacks required role (`admin` or `gestor`).

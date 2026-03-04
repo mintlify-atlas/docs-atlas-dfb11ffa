@@ -1,0 +1,134 @@
+---
+title: Rotation Reports
+description: Inventory rotation analysis and turnover metrics
+---
+
+## Get Rotation Report
+
+<Card title="GET /api/v1/reports/rotation" icon="arrows-rotate">
+  Retrieves the inventory rotation report with turnover metrics for products over a specified period.
+</Card>
+
+### Query Parameters
+
+<ParamField query="days" type="integer" default="30">
+  Number of days to analyze for rotation calculations
+</ParamField>
+
+<ParamField query="product_id" type="string" optional>
+  Filter rotation report for a specific product ID (UUID format)
+</ParamField>
+
+<ParamField query="category" type="string" optional>
+  Filter rotation report by product category
+</ParamField>
+
+### Authorization
+
+Requires one of the following roles:
+- `admin`
+- `gestor`
+- `consultor`
+
+### Response
+
+```json
+{
+  "status": "success",
+  "period_days": 30,
+  "products": [
+    {
+      "product_id": "123e4567-e89b-12d3-a456-426614174000",
+      "product_name": "Product A",
+      "sku": "SKU-001",
+      "category": "Electronics",
+      "rotation_index": 2.5,
+      "average_stock": 100,
+      "units_sold": 250,
+      "turnover_days": 12,
+      "classification": "fast_moving"
+    },
+    {
+      "product_id": "223e4567-e89b-12d3-a456-426614174001",
+      "product_name": "Product B",
+      "sku": "SKU-002",
+      "category": "Accessories",
+      "rotation_index": 0.5,
+      "average_stock": 50,
+      "units_sold": 25,
+      "turnover_days": 60,
+      "classification": "slow_moving"
+    }
+  ]
+}
+```
+
+### Response Fields
+
+<ResponseField name="rotation_index" type="number">
+  Number of times the inventory turned over during the period. Higher values indicate faster movement.
+</ResponseField>
+
+<ResponseField name="average_stock" type="number">
+  Average inventory quantity during the analysis period
+</ResponseField>
+
+<ResponseField name="units_sold" type="number">
+  Total units sold or consumed during the period
+</ResponseField>
+
+<ResponseField name="turnover_days" type="number">
+  Average number of days to sell through current inventory
+</ResponseField>
+
+<ResponseField name="classification" type="string">
+  Product movement classification:
+  - `fast_moving` - High turnover products
+  - `medium_moving` - Average turnover products
+  - `slow_moving` - Low turnover products
+  - `non_moving` - Products with no movement
+</ResponseField>
+
+### Filtering Examples
+
+#### Filter by Product
+
+```bash
+curl -X GET "https://api.example.com/api/v1/reports/rotation?days=30&product_id=123e4567-e89b-12d3-a456-426614174000" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+#### Filter by Category
+
+```bash
+curl -X GET "https://api.example.com/api/v1/reports/rotation?days=60&category=Electronics" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+#### Custom Time Period
+
+```bash
+curl -X GET "https://api.example.com/api/v1/reports/rotation?days=90" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Identify Slow Movers" icon="turtle">
+    Find products with low rotation indexes that may need promotional campaigns or clearance.
+  </Card>
+  <Card title="Optimize Stock Levels" icon="chart-line">
+    Use turnover days to adjust reorder points and maintain optimal inventory levels.
+  </Card>
+  <Card title="Category Analysis" icon="layer-group">
+    Compare rotation metrics across different product categories to identify trends.
+  </Card>
+  <Card title="Performance Tracking" icon="gauge-high">
+    Monitor inventory efficiency over different time periods (30, 60, 90 days).
+  </Card>
+</CardGroup>
+
+### Code Reference
+
+Implemented in `backend/Report/Adapters/report_controller.py:220`

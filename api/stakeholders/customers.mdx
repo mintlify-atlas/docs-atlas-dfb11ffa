@@ -1,0 +1,414 @@
+---
+title: 'Customers API'
+description: 'Manage customer information and contacts'
+---
+
+## Overview
+
+The Customers API allows you to create, retrieve, update, and delete customer records in the inventory management system. Customers can have various payment conditions and document types.
+
+**Base URL:** `/api/v1/customers`
+
+## Authentication
+
+All endpoints require JWT authentication via Bearer token in the Authorization header.
+
+## Create Customer
+
+<api-endpoint method="POST" path="/api/v1/customers/" />
+
+Create a new customer record.
+
+**Required Roles:** `admin`, `gestor`
+
+### Request Body
+
+<property name="nombre" type="string" required>
+  Customer name
+</property>
+
+<property name="numero_documento" type="string" required>
+  Document number (must be unique)
+</property>
+
+<property name="tipo_documento" type="string" default="DNI">
+  Document type (e.g., DNI, RUC, CE)
+</property>
+
+<property name="direccion" type="string">
+  Customer address
+</property>
+
+<property name="telefono" type="string">
+  Phone number
+</property>
+
+<property name="email" type="string">
+  Email address (must be unique if provided)
+</property>
+
+<property name="condicion_pago" type="string" default="CONTADO">
+  Payment condition (CONTADO, CREDITO_15, CREDITO_30, etc.)
+</property>
+
+### Request Example
+
+```python
+import requests
+
+url = "http://localhost:5000/api/v1/customers/"
+headers = {
+    "Authorization": "Bearer YOUR_JWT_TOKEN",
+    "Content-Type": "application/json"
+}
+
+payload = {
+    "nombre": "Juan Pérez",
+    "tipo_documento": "DNI",
+    "numero_documento": "12345678",
+    "direccion": "Av. Principal 123, Lima",
+    "telefono": "+51 987654321",
+    "email": "juan.perez@example.com",
+    "condicion_pago": "CREDITO_30"
+}
+
+response = requests.post(url, json=payload, headers=headers)
+print(response.json())
+```
+
+### Response
+
+<CodeGroup>
+```json 201 Created
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "nombre": "Juan Pérez",
+  "tipo_documento": "DNI",
+  "numero_documento": "12345678",
+  "direccion": "Av. Principal 123, Lima",
+  "telefono": "+51 987654321",
+  "email": "juan.perez@example.com",
+  "condicion_pago": "CREDITO_30"
+}
+```
+
+```json 400 Bad Request
+{
+  "error": "Missing required fields: nombre, numero_documento"
+}
+```
+
+```json 409 Conflict
+{
+  "error": "A customer with this document number already exists"
+}
+```
+</CodeGroup>
+
+---
+
+## List Customers
+
+<api-endpoint method="GET" path="/api/v1/customers/" />
+
+Retrieve a list of all customers with optional search and pagination.
+
+**Required Roles:** `admin`, `gestor`, `consultor`
+
+### Query Parameters
+
+<property name="skip" type="integer" default="0">
+  Number of records to skip (for pagination)
+</property>
+
+<property name="limit" type="integer" default="100">
+  Maximum number of records to return
+</property>
+
+<property name="q" type="string">
+  Search query to filter customers by name, document, or email
+</property>
+
+### Request Example
+
+```python
+import requests
+
+url = "http://localhost:5000/api/v1/customers/"
+headers = {
+    "Authorization": "Bearer YOUR_JWT_TOKEN"
+}
+
+params = {
+    "skip": 0,
+    "limit": 10,
+    "q": "Juan"
+}
+
+response = requests.get(url, params=params, headers=headers)
+print(response.json())
+```
+
+### Response
+
+```json 200 OK
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "nombre": "Juan Pérez",
+    "tipo_documento": "DNI",
+    "numero_documento": "12345678",
+    "direccion": "Av. Principal 123, Lima",
+    "telefono": "+51 987654321",
+    "email": "juan.perez@example.com",
+    "condicion_pago": "CREDITO_30"
+  },
+  {
+    "id": "660e8400-e29b-41d4-a716-446655440001",
+    "nombre": "María García",
+    "tipo_documento": "DNI",
+    "numero_documento": "87654321",
+    "direccion": "Jr. Comercio 456, Lima",
+    "telefono": "+51 912345678",
+    "email": "maria.garcia@example.com",
+    "condicion_pago": "CONTADO"
+  }
+]
+```
+
+---
+
+## Get Customer
+
+<api-endpoint method="GET" path="/api/v1/customers/{customer_id}" />
+
+Retrieve details of a specific customer by ID.
+
+**Required Roles:** `admin`, `gestor`, `consultor`
+
+### Path Parameters
+
+<property name="customer_id" type="string" required>
+  UUID of the customer
+</property>
+
+### Request Example
+
+```python
+import requests
+
+customer_id = "550e8400-e29b-41d4-a716-446655440000"
+url = f"http://localhost:5000/api/v1/customers/{customer_id}"
+headers = {
+    "Authorization": "Bearer YOUR_JWT_TOKEN"
+}
+
+response = requests.get(url, headers=headers)
+print(response.json())
+```
+
+### Response
+
+<CodeGroup>
+```json 200 OK
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "nombre": "Juan Pérez",
+  "tipo_documento": "DNI",
+  "numero_documento": "12345678",
+  "direccion": "Av. Principal 123, Lima",
+  "telefono": "+51 987654321",
+  "email": "juan.perez@example.com",
+  "condicion_pago": "CREDITO_30"
+}
+```
+
+```json 404 Not Found
+{
+  "detail": "Customer not found"
+}
+```
+</CodeGroup>
+
+---
+
+## Update Customer
+
+<api-endpoint method="PUT" path="/api/v1/customers/{customer_id}" />
+<api-endpoint method="PATCH" path="/api/v1/customers/{customer_id}" />
+
+Update an existing customer's information. Both PUT and PATCH methods are supported for partial updates.
+
+**Required Roles:** `admin`, `gestor`
+
+### Path Parameters
+
+<property name="customer_id" type="string" required>
+  UUID of the customer to update
+</property>
+
+### Request Body
+
+All fields are optional. Only include fields you want to update.
+
+<property name="nombre" type="string">
+  Customer name
+</property>
+
+<property name="tipo_documento" type="string">
+  Document type
+</property>
+
+<property name="numero_documento" type="string">
+  Document number
+</property>
+
+<property name="direccion" type="string">
+  Customer address
+</property>
+
+<property name="telefono" type="string">
+  Phone number
+</property>
+
+<property name="email" type="string">
+  Email address
+</property>
+
+<property name="condicion_pago" type="string">
+  Payment condition
+</property>
+
+### Request Example
+
+```python
+import requests
+
+customer_id = "550e8400-e29b-41d4-a716-446655440000"
+url = f"http://localhost:5000/api/v1/customers/{customer_id}"
+headers = {
+    "Authorization": "Bearer YOUR_JWT_TOKEN",
+    "Content-Type": "application/json"
+}
+
+payload = {
+    "telefono": "+51 999888777",
+    "condicion_pago": "CREDITO_15"
+}
+
+response = requests.put(url, json=payload, headers=headers)
+print(response.json())
+```
+
+### Response
+
+<CodeGroup>
+```json 200 OK
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "nombre": "Juan Pérez",
+  "tipo_documento": "DNI",
+  "numero_documento": "12345678",
+  "direccion": "Av. Principal 123, Lima",
+  "telefono": "+51 999888777",
+  "email": "juan.perez@example.com",
+  "condicion_pago": "CREDITO_15"
+}
+```
+
+```json 404 Not Found
+{
+  "detail": "Customer not found"
+}
+```
+
+```json 409 Conflict
+{
+  "error": "Another customer with this document number already exists"
+}
+```
+</CodeGroup>
+
+---
+
+## Delete Customer
+
+<api-endpoint method="DELETE" path="/api/v1/customers/{customer_id}" />
+
+Delete a customer from the system.
+
+**Required Roles:** `admin`, `gestor`
+
+### Path Parameters
+
+<property name="customer_id" type="string" required>
+  UUID of the customer to delete
+</property>
+
+### Request Example
+
+```python
+import requests
+
+customer_id = "550e8400-e29b-41d4-a716-446655440000"
+url = f"http://localhost:5000/api/v1/customers/{customer_id}"
+headers = {
+    "Authorization": "Bearer YOUR_JWT_TOKEN"
+}
+
+response = requests.delete(url, headers=headers)
+print(response.json())
+```
+
+### Response
+
+<CodeGroup>
+```json 200 OK
+{
+  "message": "Customer deleted successfully"
+}
+```
+
+```json 404 Not Found
+{
+  "detail": "Customer not found"
+}
+```
+
+```json 409 Conflict
+{
+  "error": "Cannot delete customer because they have related transactions"
+}
+```
+</CodeGroup>
+
+<Warning>
+  Customers with existing transactions (sales, invoices, etc.) cannot be deleted due to referential integrity constraints. Consider marking them as inactive instead if your business logic supports it.
+</Warning>
+
+## Error Codes
+
+| Status Code | Description |
+|-------------|-------------|
+| 200 | Success |
+| 201 | Created |
+| 400 | Bad Request - Missing required fields or validation error |
+| 401 | Unauthorized - Invalid or missing JWT token |
+| 403 | Forbidden - Insufficient permissions for the operation |
+| 404 | Not Found - Customer does not exist |
+| 409 | Conflict - Duplicate document number or email, or integrity constraint violation |
+
+## Data Models
+
+### Customer Object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string (UUID) | Unique identifier |
+| nombre | string | Customer name |
+| tipo_documento | string | Document type (DNI, RUC, CE, etc.) |
+| numero_documento | string | Document number (unique) |
+| direccion | string | Physical address |
+| telefono | string | Contact phone number |
+| email | string | Email address (unique) |
+| condicion_pago | string | Payment terms (CONTADO, CREDITO_15, CREDITO_30, etc.) |

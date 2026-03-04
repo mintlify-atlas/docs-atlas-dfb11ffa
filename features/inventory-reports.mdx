@@ -1,0 +1,563 @@
+---
+title: 'Inventory Reports'
+description: 'Comprehensive analytics with dashboard metrics, valuation reports, rotation analysis, and movement search'
+icon: 'chart-line'
+---
+
+## Overview
+
+The Inventory Reports system provides real-time analytics and insights into your inventory performance. From dashboard KPIs to detailed valuation reports, you can monitor stock levels, analyze rotation patterns, and track financial metrics.
+
+<Info>
+  All reports are generated in real-time from actual inventory data, ensuring accuracy and up-to-date insights.
+</Info>
+
+## Dashboard Overview
+
+The main dashboard provides a comprehensive at-a-glance view of inventory status:
+
+<CodeGroup>
+```python backend/Report/Domain/dashboard.py
+class DashboardService:
+    """Service for dashboard data aggregation"""
+    
+    def get_dashboard_summary(self, low_stock_threshold: int = 10) -> Dict[str, Any]:
+        return {
+            "total_inventory_value": self.get_total_inventory_value(),
+            "low_stock_products": self.get_low_stock_products(low_stock_threshold),
+            "recent_movements": self.get_recent_movements(),
+            "rotation_summary": self.get_rotation_summary(30)
+        }
+```
+</CodeGroup>
+
+### Key Performance Indicators
+
+<CardGroup cols={2}>
+  <Card title="Total Inventory Value" icon="money-bill" color="#3b82f6">
+    Real-time valuation based on FIFO cost method
+  </Card>
+  
+  <Card title="Low Stock Alerts" icon="triangle-exclamation" color="#eab308">
+    Products below customizable threshold levels
+  </Card>
+  
+  <Card title="Recent Activity" icon="clock-rotate-left" color="#10b981">
+    Latest inventory movements and transactions
+  </Card>
+  
+  <Card title="Rotation Metrics" icon="arrows-rotate" color="#8b5cf6">
+    Inventory turnover in the last 30 days
+  </Card>
+</CardGroup>
+
+### Dashboard API
+
+<Card title="Get Dashboard Summary" icon="gauge-high" href="/api/reports/dashboard">
+  **GET** `/api/v1/reports/dashboard`
+  
+  Retrieves complete dashboard with all KPIs.
+</Card>
+
+<RequestExample>
+```bash Request
+curl -X GET "https://api.example.com/api/v1/reports/dashboard?low_stock_threshold=15" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```json Response
+{
+  "status": "success",
+  "data": {
+    "total_inventory_value": 125430.50,
+    "low_stock_products": [
+      {
+        "product_id": "uuid",
+        "name": "Product A",
+        "sku": "BEB-COC-A3F2D1",
+        "current_stock": 8,
+        "threshold": 15,
+        "unit_measure": "units"
+      }
+    ],
+    "recent_movements": [...],
+    "rotation_summary": {...}
+  }
+}
+```
+</RequestExample>
+
+## Inventory Valuation
+
+Calculate the total value of your inventory at any point in time:
+
+<CodeGroup>
+```python backend/Report/Domain/dashboard.py
+def get_total_inventory_value(self) -> float:
+    """Calculate total inventory value (available_quantity × unit_cost)"""
+    batches = self.db.query(Batch).filter(Batch.available_quantity > 0).all()
+    total_value = sum(batch.available_quantity * batch.unit_cost for batch in batches)
+    return round(total_value, 2)
+```
+</CodeGroup>
+
+<Note>
+  Inventory value is calculated using the FIFO cost method: each batch's available quantity is multiplied by its unit cost, then summed across all active batches.
+</Note>
+
+### Valuation by Date
+
+Generate historical valuation reports for any specific date:
+
+<CodeGroup>
+```python backend/Report/Domain/metrics.py
+def get_inventory_value_at_date(self, target_date: datetime) -> Dict[str, Any]:
+    """Calculate inventory value at a specific date using FIFO"""
+    batches = self.db.query(Batch).all()
+    
+    total_value = 0
+    inventory_details = []
+    
+    for batch in batches:
+        # Calculate quantity available at target date
+        movements = self.db.query(Movement).filter(
+            Movement.reference_id.contains(batch.id),
+            Movement.created_at <= target_date
+        ).all()
+        
+        available_at_date = batch.available_quantity
+        
+        if available_at_date > 0:
+            batch_value = available_at_date * batch.unit_cost
+            total_value += batch_value
+            inventory_details.append({...})
+    
+    return {
+        "date": target_date.isoformat(),
+        "total_value": round(total_value, 2),
+        "details_by_batch": inventory_details,
+        "details_by_product": self._aggregate_by_product(inventory_details)
+    }
+```
+</CodeGroup>
+
+### Valuation Report Structure
+
+<ResponseField name="date" type="string">
+  Target date for the valuation report
+</ResponseField>
+
+<ResponseField name="total_value" type="float">
+  Total inventory value in base currency (Bs)
+</ResponseField>
+
+<ResponseField name="details_by_batch" type="array">
+  Array of batch-level details with quantities and costs
+  
+  <Expandable title="Batch Details">
+    <ResponseField name="product_id" type="string">
+      Product identifier
+    </ResponseField>
+    <ResponseField name="batch_id" type="string">
+      Batch identifier
+    </ResponseField>
+    <ResponseField name="quantity_available" type="integer">
+      Units in stock
+    </ResponseField>
+    <ResponseField name="unit_cost" type="float">
+      Cost per unit
+    </ResponseField>
+    <ResponseField name="total_cost" type="float">
+      Extended cost: quantity × unit_cost
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="details_by_product" type="array">
+  Aggregated data grouped by product
+  
+  <Expandable title="Product Summary">
+    <ResponseField name="product_id" type="string">
+      Product identifier
+    </ResponseField>
+    <ResponseField name="total_quantity" type="integer">
+      Total units across all batches
+    </ResponseField>
+    <ResponseField name="average_unit_cost" type="float">
+      Weighted average cost
+    </ResponseField>
+    <ResponseField name="total_cost" type="float">
+      Total value for this product
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Low Stock Alerts
+
+Identify products that need reordering:
+
+<CodeGroup>
+```python backend/Report/Domain/dashboard.py
+def get_low_stock_products(self, threshold: int = 10) -> List[Dict[str, Any]]:
+    """Get products with stock below threshold"""
+    low_stock = []
+    products = self.db.query(Product).all()
+    
+    for product in products:
+        batches = self.db.query(Batch).filter(
+            Batch.product_id == product.id,
+            Batch.available_quantity > 0
+        ).all()
+        
+        total_available = sum(batch.available_quantity for batch in batches)
+        
+        if total_available < threshold:
+            low_stock.append({
+                "product_id": product.id,
+                "name": product.name,
+                "sku": product.sku,
+                "current_stock": total_available,
+                "threshold": threshold,
+                "unit_measure": product.unit_measure
+            })
+    
+    return sorted(low_stock, key=lambda x: x['current_stock'])
+```
+</CodeGroup>
+
+<CodeGroup>
+```jsx frontend/src/Report/UI/pages/DashboardPage.jsx
+<div className="overflow-x-auto">
+    <table className="w-full">
+        <thead>
+            <tr>
+                <th>Producto</th>
+                <th>SKU</th>
+                <th>Stock Actual</th>
+                <th>Umbral</th>
+                <th>Diferencia</th>
+            </tr>
+        </thead>
+        <tbody>
+            {lowStockProducts.map(product => (
+                <tr key={product.product_id}>
+                    <td>{product.name}</td>
+                    <td>{product.sku}</td>
+                    <td>
+                        <span className="badge badge-red">
+                            {product.current_stock} {product.unit_measure}
+                        </span>
+                    </td>
+                    <td>{product.threshold}</td>
+                    <td className="text-red-400">
+                        {product.threshold - product.current_stock}
+                    </td>
+                </tr>
+            ))}
+        </tbody>
+    </table>
+</div>
+```
+</CodeGroup>
+
+<Tip>
+  Set different thresholds for different product categories. Fast-moving items may need higher thresholds than slow-moving inventory.
+</Tip>
+
+## Rotation Analysis
+
+Understand how quickly inventory moves through your business:
+
+<CodeGroup>
+```python backend/Report/Domain/metrics.py
+def get_rotation_index(self, 
+                      product_id: Optional[str] = None, 
+                      days: int = 30, 
+                      category: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Calculate rotation index: quantity_sold / ((stock_inicial + stock_final) / 2)
+    """
+    from datetime import timedelta
+    
+    end_date = datetime.now(timezone.utc)
+    start_date = end_date - timedelta(days=days)
+    
+    # Get products to analyze
+    query = self.db.query(Product)
+    if product_id:
+        query = query.filter(Product.id == product_id)
+    if category:
+        query = query.filter(Product.category == category)
+    
+    products = query.all()
+    rotation_data = []
+    
+    for product in products:
+        # Quantity sold in period
+        exits = self.db.query(Movement).filter(
+            Movement.product_id == product.id,
+            Movement.type == MovementType.EXIT,
+            Movement.created_at >= start_date,
+            Movement.created_at <= end_date
+        ).all()
+        
+        total_sold = sum(m.quantity for m in exits)
+        
+        # Calculate average stock
+        stock_inicial = ...  # Stock at start of period
+        stock_final = ...    # Stock at end of period
+        stock_promedio = (stock_inicial + stock_final) / 2
+        
+        # Rotation index
+        rotation_index = total_sold / stock_promedio if stock_promedio > 0 else 0
+        
+        rotation_data.append({
+            "product_id": product.id,
+            "product_name": product.name,
+            "quantity_sold": total_sold,
+            "stock_promedio": round(stock_promedio, 2),
+            "rotation_index": round(rotation_index, 2),
+            "period_days": days
+        })
+    
+    return sorted(rotation_data, key=lambda x: x['rotation_index'], reverse=True)
+```
+</CodeGroup>
+
+### Rotation Metrics
+
+<Steps>
+  <Step title="Calculate Sales">
+    Sum all EXIT movements for the product in the time period
+  </Step>
+  
+  <Step title="Calculate Average Stock">
+    `(beginning_stock + ending_stock) / 2`
+  </Step>
+  
+  <Step title="Compute Rotation Index">
+    `rotation_index = total_sold / average_stock`
+  </Step>
+  
+  <Step title="Interpret Results">
+    Higher index = faster inventory turnover
+  </Step>
+</Steps>
+
+<CardGroup cols={3}>
+  <Card title="High Rotation" icon="gauge-high" color="#10b981">
+    Index > 2.0: Fast-moving items
+  </Card>
+  
+  <Card title="Medium Rotation" icon="gauge" color="#eab308">
+    Index 0.5-2.0: Normal turnover
+  </Card>
+  
+  <Card title="Low Rotation" icon="gauge-simple-low" color="#ef4444">
+    Index < 0.5: Slow-moving items
+  </Card>
+</CardGroup>
+
+## Recent Movements
+
+Track the latest inventory activity:
+
+<CodeGroup>
+```python backend/Report/Domain/dashboard.py
+def get_recent_movements(self, limit: int = 10) -> List[Dict[str, Any]]:
+    """Get latest movements with details"""
+    movements = self.db.query(Movement).order_by(
+        Movement.created_at.desc()
+    ).limit(limit).all()
+    
+    result = []
+    for m in movements:
+        product = self.db.query(Product).filter(Product.id == m.product_id).first()
+        result.append({
+            "id": m.id,
+            "product_name": product.name if product else "Unknown",
+            "product_sku": product.sku if product else "Unknown",
+            "type": str(m.type),
+            "quantity": m.quantity,
+            "unit_price": m.unit_price,
+            "total_price": m.total_price,
+            "created_at": m.created_at.isoformat(),
+            "created_by": m.created_by
+        })
+    
+    return result
+```
+</CodeGroup>
+
+<Note>
+  Recent movements provide a real-time activity feed, useful for monitoring daily operations and quickly identifying unusual transactions.
+</Note>
+
+## Export Capabilities
+
+Generate reports in multiple formats:
+
+<CodeGroup>
+```python backend/Report/Adapters/report_controller.py
+@router.route('/valorization/export', methods=['GET'])
+@require_role('admin', 'gestor', 'consultor')
+def export_valorization_report():
+    date_str = request.args.get('date')
+    export_format = request.args.get('format', 'csv').lower()
+    
+    report = service.get_inventory_value_at_date(target_date)
+    
+    if export_format == 'csv':
+        output = StringIO()
+        writer = csv.writer(output)
+        
+        # Header
+        writer.writerow(['Reporte de Valorización de Inventario'])
+        writer.writerow(['Fecha', report['date']])
+        writer.writerow(['Valor Total', f"Bs {report['total_value']}"])
+        writer.writerow([])
+        
+        # Product summary
+        writer.writerow(['Producto', 'SKU', 'Cantidad', 'Costo Unitario', 'Costo Total'])
+        for product in report['details_by_product']:
+            writer.writerow([...])
+        
+        return send_file(output, mimetype='text/csv', 
+                        download_name=f"valorization_{date_str}.csv")
+```
+</CodeGroup>
+
+### Supported Export Formats
+
+<CardGroup cols={3}>
+  <Card title="CSV" icon="file-csv">
+    Comma-separated values for Excel
+  </Card>
+  
+  <Card title="JSON" icon="file-code">
+    Structured data for API integration
+  </Card>
+  
+  <Card title="PDF" icon="file-pdf">
+    Formatted reports for printing (coming soon)
+  </Card>
+</CardGroup>
+
+## Advanced Filtering
+
+Filter movements and reports with powerful search capabilities:
+
+<ParamField query="start_date" type="date">
+  Beginning of date range (YYYY-MM-DD)
+</ParamField>
+
+<ParamField query="end_date" type="date">
+  End of date range (YYYY-MM-DD)
+</ParamField>
+
+<ParamField query="product_id" type="string">
+  Filter by specific product UUID
+</ParamField>
+
+<ParamField query="category" type="string">
+  Filter by product category
+</ParamField>
+
+<ParamField query="movement_type" type="enum">
+  Filter by: `ENTRY`, `EXIT`, `ADJUSTMENT`
+</ParamField>
+
+<ParamField query="user_id" type="string">
+  Filter by user who created records
+</ParamField>
+
+## Dashboard Customization
+
+Customize the dashboard threshold for low stock alerts:
+
+<CodeGroup>
+```jsx frontend/src/Report/UI/pages/DashboardPage.jsx
+const [lowStockThreshold, setLowStockThreshold] = useState(10);
+
+useEffect(() => {
+    fetchDashboard(lowStockThreshold);
+}, [lowStockThreshold]);
+
+// UI Control
+<div className="flex gap-4 items-center">
+    <label>Umbral de Stock Bajo:</label>
+    <input
+        type="number"
+        min="1"
+        value={lowStockThreshold}
+        onChange={(e) => setLowStockThreshold(parseInt(e.target.value))}
+        className="px-3 py-2 bg-gray-800 text-white rounded"
+    />
+    <span>unidades</span>
+</div>
+```
+</CodeGroup>
+
+## Report Access Control
+
+All reports respect role-based access control:
+
+<AccordionGroup>
+  <Accordion title="Admin" icon="user-shield">
+    Full access to all reports and analytics
+  </Accordion>
+  
+  <Accordion title="Gestor (Manager)" icon="user-tie">
+    Access to all reports and exports
+  </Accordion>
+  
+  <Accordion title="Consultor (Viewer)" icon="user">
+    Read-only access to reports, cannot modify data
+  </Accordion>
+</AccordionGroup>
+
+## Performance Considerations
+
+<Warning>
+  Large inventories may require pagination for movement searches. Use `skip` and `limit` parameters to manage data volume.
+</Warning>
+
+<Tip>
+  Reports are generated on-demand. For frequently accessed reports, consider caching results or scheduling periodic generation.
+</Tip>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Regular Monitoring" icon="chart-line">
+    Check the dashboard daily to stay informed about inventory status
+  </Card>
+  
+  <Card title="Set Smart Thresholds" icon="sliders">
+    Adjust low stock thresholds based on lead times and sales velocity
+  </Card>
+  
+  <Card title="Analyze Rotation" icon="arrows-rotate">
+    Review rotation reports monthly to identify slow-moving inventory
+  </Card>
+  
+  <Card title="Export for Records" icon="download">
+    Export valuation reports for month-end accounting
+  </Card>
+</CardGroup>
+
+## Related Documentation
+
+<CardGroup cols={3}>
+  <Card title="Stock Movements" icon="arrows-turn-to-dots" href="/features/stock-movements">
+    Understand data behind reports
+  </Card>
+  
+  <Card title="Batch Tracking" icon="layer-group" href="/features/batch-tracking">
+    Learn about FIFO valuation
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/reports/dashboard">
+    Complete API documentation
+  </Card>
+</CardGroup>

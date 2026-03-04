@@ -1,0 +1,637 @@
+---
+title: 'Hexagonal Architecture'
+description: 'Understanding the Ports and Adapters pattern in the Inventory Management System'
+---
+
+## What is Hexagonal Architecture?
+
+Hexagonal Architecture, also known as **Ports and Adapters** pattern, is an architectural pattern that aims to create loosely coupled application components that can be easily tested and maintained.
+
+### Core Principles
+
+1. **Domain at the Center**: Business logic is isolated from external concerns
+2. **Dependency Inversion**: Outer layers depend on inner layers, never the reverse
+3. **Technology Agnostic**: Core domain doesn't know about frameworks or databases
+4. **Testability**: Each layer can be tested in isolation
+
+### The Hexagon Metaphor
+
+```
+         ┌─────────────────────────────────────┐
+         │                                     │
+         │         ADAPTERS (Outside)          │
+         │                                     │
+    ┌────┴────┐                          ┌────┴────┐
+    │  Flask  │                          │ React   │
+    │  HTTP   │                          │   UI    │
+    │ Routes  │                          │Components│
+    └────┬────┘                          └────┬────┘
+         │                                     │
+         │         ┌───────────────┐          │
+         │         │               │          │
+         ├─────────┤     PORTS     ├──────────┤
+         │         │  (Interfaces) │          │
+         │         │               │          │
+         │         └───────┬───────┘          │
+         │                 │                  │
+         │         ┌───────┴───────┐          │
+         │         │               │          │
+         └─────────┤    DOMAIN     ├──────────┘
+                   │ (Business     │
+                   │   Logic)      │
+                   │               │
+                   └───────────────┘
+```
+
+## Implementation in Backend
+
+The backend follows a clear three-layer structure within each module.
+
+### Example: Product Module
+
+Directory structure:
+```
+Product/
+├── Domain/                  # Core business logic
+│   ├── product.py          # Product entity
+│   ├── batch.py            # Batch entity
+│   ├── movement.py         # Movement entity
+│   └── price_history.py    # Price history entity
+├── Ports/                  # Interfaces (contracts)
+│   └── repository.py       # Abstract repository interface
+└── Adapters/               # Concrete implementations
+    ├── product_controller.py      # Flask HTTP adapter
+    ├── product_repository.py      # SQLAlchemy adapter
+    ├── batch_controller.py
+    ├── movement_controller.py
+    └── movement_repository.py
+```
+
+### 1. Domain Layer (Core)
+
+The domain contains pure business logic and entities.
+
+**Example: Product Entity** (`Product/Domain/product.py:1`)
+
+```python
+from sqlalchemy import Column, String, Integer, Float, Boolean
+from sqlalchemy.orm import relationship
+from Database.config import Base
+from CommonLayer.domain.autitable_entity import AuditableEntity
+
+class Product(Base, AuditableEntity):
+    __tablename__ = "products"
+
+    id = Column(String(50), primary_key=True, index=True)
+    sku = Column(String(100), unique=True, index=True, nullable=False)
+    name = Column(String(200), index=True, nullable=False)
+    description = Column(String(500), nullable=True)
+    category = Column(String(100), index=True, nullable=False)
+    unit_measure = Column(String(50), nullable=False)
+    unit_value = Column(Float, default=1.0, nullable=False)
+    is_perishable = Column(Boolean, default=False, nullable=False)
+    expiration_date = Column(String(50), nullable=True)
+    suggested_price = Column(Float, nullable=False)
+
+    # Relationships
+    batches = relationship("Batch", back_populates="product", 
+                          cascade="all, delete-orphan")
+    movements = relationship("Movement", back_populates="product", 
+                            cascade="all, delete-orphan")
+    price_history = relationship("PriceHistory", back_populates="product", 
+                                cascade="all, delete-orphan")
+```
+
+**Example: Movement Entity** (`Product/Domain/movement.py:1`)
+
+```python
+from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Enum
+from sqlalchemy.orm import relationship
+import enum
+from Database.config import Base
+from CommonLayer.domain.autitable_entity import AuditableEntity
+
+class MovementType(str, enum.Enum):
+    ENTRY = "ENTRY"           # Stock in
+    EXIT = "EXIT"             # Stock out
+    ADJUSTMENT = "ADJUSTMENT" # Inventory adjustment
+
+class Movement(Base, AuditableEntity):
+    __tablename__ = "movements"
+
+    id = Column(String(50), primary_key=True, index=True)
+    product_id = Column(String(50), ForeignKey("products.id"), nullable=False)
+    supplier_id = Column(String(50), ForeignKey("suppliers.id"), nullable=True)
+    customer_id = Column(String(50), ForeignKey("customers.id"), nullable=True)
+    type = Column(String(50), nullable=False)
+    quantity = Column(Integer, nullable=False)
+    unit_price = Column(Float, nullable=True)
+    total_price = Column(Float, nullable=True)
+    total_cost = Column(Float, nullable=True)  # FIFO calculated cost
+    reference_id = Column(String(50), nullable=True)
+    notes = Column(String(500), nullable=True)
+
+    # Relationships
+    product = relationship("Product", back_populates="movements")
+    supplier = relationship("Supplier", back_populates="movements")
+    customer = relationship("Customer", back_populates="movements")
+```
+
+### 2. Ports Layer (Interfaces)
+
+Ports define contracts that adapters must implement.
+
+**Example: Repository Port** (`Product/Ports/repository.py:1`)
+
+```python
+from typing import List, Optional
+from abc import ABC, abstractmethod
+from Product.Domain.product import Product
+
+class ProductRepositoryPort(ABC):
+    """Abstract interface for product data access."""
+    
+    @abstractmethod
+    def get_all(self, skip: int = 0, limit: int = 100) -> List[Product]:
+        pass
+
+    @abstractmethod
+    def get_by_id(self, product_id: str) -> Optional[Product]:
+        pass
+
+    @abstractmethod
+    def get_by_sku(self, sku: str) -> Optional[Product]:
+        pass
+
+    @abstractmethod
+    def create(self, product: Product) -> Product:
+        pass
+
+    @abstractmethod
+    def update(self, product: Product) -> Product:
+        pass
+
+    @abstractmethod
+    def delete(self, product_id: str) -> bool:
+        pass
+```
+
+This interface is **framework-agnostic**. It doesn't know about SQLAlchemy, MongoDB, or any specific database technology.
+
+### 3. Adapters Layer (Implementations)
+
+#### A. Repository Adapter (Data Access)
+
+**Example: SQLAlchemy Repository** (`Product/Adapters/product_repository.py:1`)
+
+```python
+from typing import List, Optional
+from sqlalchemy.orm import Session
+from Product.Domain.product import Product
+from Product.Ports.repository import ProductRepositoryPort
+
+class ProductRepository(ProductRepositoryPort):
+    """SQLAlchemy implementation of ProductRepositoryPort."""
+    
+    def __init__(self, db: Session):
+        self.db = db
+
+    def get_all(self, skip: int = 0, limit: int = 100) -> List[Product]:
+        return self.db.query(Product).offset(skip).limit(limit).all()
+
+    def get_by_id(self, product_id: str) -> Optional[Product]:
+        return self.db.query(Product).filter(Product.id == product_id).first()
+
+    def get_by_sku(self, sku: str) -> Optional[Product]:
+        return self.db.query(Product).filter(Product.sku == sku).first()
+
+    def create(self, product: Product) -> Product:
+        self.db.add(product)
+        self.db.commit()
+        self.db.refresh(product)
+        return product
+
+    def update(self, product: Product) -> Product:
+        self.db.commit()
+        self.db.refresh(product)
+        return product
+
+    def delete(self, product_id: str) -> bool:
+        product = self.get_by_id(product_id)
+        if product:
+            self.db.delete(product)
+            self.db.commit()
+            return True
+        return False
+```
+
+#### B. Controller Adapter (HTTP Interface)
+
+**Example: Flask Controller** (`Product/Adapters/product_controller.py:13`)
+
+```python
+import uuid
+from flask import Blueprint, request, jsonify
+from Database.config import get_db
+from Product.Domain.product import Product
+from Product.Adapters.product_repository import ProductRepository
+from CommonLayer.middleware.auth_middleware import require_role
+
+router = Blueprint('products', __name__, url_prefix='/api/v1/products')
+
+@router.route('/', methods=['POST'])
+@require_role('admin', 'gestor')
+def create_product():
+    """HTTP adapter: Converts JSON request to domain entity."""
+    data = request.get_json()
+    
+    # Validate required fields
+    if not data or not data.get('name') or not data.get('category'):
+        return jsonify({"error": "Missing required fields"}), 400
+
+    # Get database session
+    db = next(get_db())
+    repo = ProductRepository(db)
+    
+    # Create domain entity
+    new_product = Product(
+        id=str(uuid.uuid4()),
+        sku=data.get('sku'),
+        name=data.get('name'),
+        description=data.get('description'),
+        category=data.get('category'),
+        unit_measure=data.get('unit_measure'),
+        unit_value=float(data.get('unit_value', 1.0)),
+        is_perishable=data.get('is_perishable', False),
+        expiration_date=data.get('expiration_date'),
+        suggested_price=float(data.get('suggested_price', 0))
+    )
+    
+    # Persist through repository
+    product = repo.create(new_product)
+    
+    # Convert to JSON response
+    return jsonify({
+        "id": product.id,
+        "sku": product.sku,
+        "name": product.name,
+        "category": product.category,
+        "unit_measure": product.unit_measure,
+        "suggested_price": product.suggested_price
+    }), 201
+```
+
+## Implementation in Frontend
+
+The frontend mirrors the backend architecture with React-specific adaptations.
+
+### Example: Product Module
+
+Directory structure:
+```
+Product/
+├── Domain/                    # Business models
+│   └── models/
+│       ├── Product.js
+│       ├── Batch.js
+│       └── Movement.js
+├── Ports/                     # Interface contracts
+│   ├── ProductRepository.js
+│   └── InventoryRepository.js
+├── Adapters/                  # External integrations
+│   ├── ApiProductRepository.js     # HTTP API adapter
+│   └── ApiInventoryRepository.js
+├── Application/               # Use cases & hooks
+│   ├── useProductActions.js
+│   └── useInventoryActions.js
+└── UI/                        # React components
+    ├── components/
+    │   ├── ProductForm.jsx
+    │   ├── ProductList.jsx
+    │   └── BatchList.jsx
+    └── pages/
+        ├── ProductListPage.jsx
+        └── ProductDetailPage.jsx
+```
+
+### 1. Domain Layer
+
+**Example: Product Model** (`Product/Domain/models/Product.js:1`)
+
+```javascript
+// Pure JavaScript domain model (currently empty placeholder)
+export class Product {
+  constructor(data) {
+    this.id = data.id;
+    this.sku = data.sku;
+    this.name = data.name;
+    this.description = data.description;
+    this.category = data.category;
+    this.unitMeasure = data.unit_measure;
+    this.unitValue = data.unit_value;
+    this.isPerishable = data.is_perishable;
+    this.suggestedPrice = data.suggested_price;
+  }
+  
+  // Domain methods can be added here
+  isLowStock(threshold = 10) {
+    return this.availableQuantity < threshold;
+  }
+}
+```
+
+### 2. Ports Layer
+
+**Example: Repository Port** (`Product/Ports/ProductRepository.js:1`)
+
+```javascript
+// Interface definition (via JSDoc)
+/**
+ * @interface ProductRepositoryPort
+ * @description Contract for product data access
+ */
+export const ProductRepositoryPort = {
+  /**
+   * @returns {Promise<Array<Product>>}
+   */
+  getAll: async () => { throw new Error('Not implemented'); },
+  
+  /**
+   * @param {string} id
+   * @returns {Promise<Product>}
+   */
+  getById: async (id) => { throw new Error('Not implemented'); },
+  
+  /**
+   * @param {Object} productData
+   * @returns {Promise<Product>}
+   */
+  create: async (productData) => { throw new Error('Not implemented'); }
+};
+```
+
+### 3. Adapters Layer
+
+**Example: API Adapter** (`Product/Adapters/ApiProductRepository.js:1`)
+
+```javascript
+import { axiosInstance } from '../../CommonLayer/config/axios-instance.js';
+
+/**
+ * HTTP API adapter implementing ProductRepositoryPort
+ */
+export const ApiProductRepository = {
+    getAll: async () => {
+        const response = await axiosInstance.get('/products/');
+        return response.data;
+    },
+    
+    getById: async (id) => {
+        const response = await axiosInstance.get(`/products/${id}`);
+        return response.data;
+    },
+    
+    create: async (productData) => {
+        const response = await axiosInstance.post('/products/', productData);
+        return response.data;
+    }
+};
+```
+
+### 4. Application Layer
+
+**Example: Use Case Hook** (`Product/Application/useProductActions.js:1`)
+
+```javascript
+import { useState } from 'react';
+import { ApiProductRepository } from '../Adapters/ApiProductRepository.js';
+
+/**
+ * Custom hook encapsulating product use cases
+ */
+export const useProductActions = () => {
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+    
+    const createProduct = async (productData) => {
+        setLoading(true);
+        setError(null);
+        try {
+            const result = await ApiProductRepository.create(productData);
+            return result;
+        } catch (err) {
+            setError(err.message);
+            throw err;
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+    const getAllProducts = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            return await ApiProductRepository.getAll();
+        } catch (err) {
+            setError(err.message);
+            throw err;
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+    return {
+        createProduct,
+        getAllProducts,
+        loading,
+        error
+    };
+};
+```
+
+### 5. UI Layer
+
+**Example: React Component** (`Product/UI/pages/ProductListPage.jsx:1`)
+
+```javascript
+import { useEffect, useState } from 'react';
+import { useProductActions } from '../../Application/useProductActions.js';
+import ProductList from '../components/ProductList.jsx';
+
+export default function ProductListPage() {
+    const [products, setProducts] = useState([]);
+    const { getAllProducts, loading, error } = useProductActions();
+    
+    useEffect(() => {
+        const fetchProducts = async () => {
+            try {
+                const data = await getAllProducts();
+                setProducts(data);
+            } catch (err) {
+                console.error('Failed to fetch products:', err);
+            }
+        };
+        fetchProducts();
+    }, []);
+    
+    if (loading) return <div>Loading...</div>;
+    if (error) return <div>Error: {error}</div>;
+    
+    return (
+        <div>
+            <h1>Products</h1>
+            <ProductList products={products} />
+        </div>
+    );
+}
+```
+
+## Benefits of Hexagonal Architecture
+
+### 1. Testability
+
+Each layer can be tested independently:
+
+```python
+# Unit test for repository (with mock database)
+def test_create_product():
+    mock_db = Mock(spec=Session)
+    repo = ProductRepository(mock_db)
+    product = Product(id="1", name="Test", sku="TEST-001")
+    
+    result = repo.create(product)
+    
+    mock_db.add.assert_called_once_with(product)
+    mock_db.commit.assert_called_once()
+```
+
+### 2. Flexibility
+
+Swap implementations easily:
+
+```python
+# Switch from SQLAlchemy to MongoDB
+class MongoProductRepository(ProductRepositoryPort):
+    def __init__(self, mongo_client):
+        self.collection = mongo_client.db.products
+    
+    def get_by_id(self, product_id: str) -> Optional[Product]:
+        doc = self.collection.find_one({"_id": product_id})
+        return Product(**doc) if doc else None
+    # ... implement other methods
+```
+
+### 3. Maintainability
+
+Clear separation of concerns:
+- **Domain changes**: Only affect Domain layer
+- **Database changes**: Only affect Repository adapter
+- **API changes**: Only affect Controller adapter
+- **UI changes**: Only affect UI layer
+
+### 4. Framework Independence
+
+The core domain doesn't depend on:
+- Flask (could migrate to FastAPI)
+- SQLAlchemy (could migrate to SQLModel or raw SQL)
+- React (could migrate to Vue or Svelte)
+
+## Data Flow Through Layers
+
+### Request Flow (Frontend → Backend)
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ 1. User clicks "Create Product" button                   │
+└────────────────────┬─────────────────────────────────────┘
+                     ↓
+┌──────────────────────────────────────────────────────────┐
+│ 2. UI Layer (ProductForm.jsx)                            │
+│    - Collects form data                                   │
+│    - Validates input                                      │
+└────────────────────┬─────────────────────────────────────┘
+                     ↓
+┌──────────────────────────────────────────────────────────┐
+│ 3. Application Layer (useProductActions)                 │
+│    - Orchestrates use case                                │
+│    - Manages loading state                                │
+└────────────────────┬─────────────────────────────────────┘
+                     ↓
+┌──────────────────────────────────────────────────────────┐
+│ 4. Adapter (ApiProductRepository)                        │
+│    - Makes HTTP POST request                              │
+│    - Serializes data to JSON                              │
+└────────────────────┬─────────────────────────────────────┘
+                     ↓ HTTP
+┌──────────────────────────────────────────────────────────┐
+│ 5. Backend Adapter (product_controller.py)               │
+│    - Parses JSON request                                  │
+│    - Validates required fields                            │
+│    - Creates domain entity                                │
+└────────────────────┬─────────────────────────────────────┘
+                     ↓
+┌──────────────────────────────────────────────────────────┐
+│ 6. Repository Adapter (ProductRepository)                │
+│    - Adds entity to session                               │
+│    - Commits transaction                                  │
+└────────────────────┬─────────────────────────────────────┘
+                     ↓
+┌──────────────────────────────────────────────────────────┐
+│ 7. Database (SQLite)                                     │
+│    - Persists product record                              │
+└──────────────────────────────────────────────────────────┘
+```
+
+## Module Examples
+
+The same pattern is applied consistently across all modules:
+
+### Auth Module
+- **Domain**: `Auth/Domain/auth_service.py`, `Auth/Domain/token.py`
+- **Ports**: `Auth/Ports/token_provider.py`, `Auth/Ports/email_provider.py`
+- **Adapters**: `Auth/Adapters/jwt_token_provider.py`, `Auth/Adapters/mock_email_provider.py`
+
+### Stakeholder Module
+- **Domain**: `Stakeholder/Domain/customer.py`, `Stakeholder/Domain/supplier.py`
+- **Ports**: `Stakeholder/Ports/customer_repository.py`
+- **Adapters**: `Stakeholder/Adapters/customer_repository.py`, `Stakeholder/Adapters/customer_controller.py`
+
+### Audit Module
+- **Domain**: `Audit/Domain/audit_log.py`
+- **Ports**: `Audit/Ports/audit_repository.py`
+- **Adapters**: `Audit/Adapters/audit_repository.py`, `Audit/Adapters/audit_controller.py`
+
+## Common Layer (Shared Kernel)
+
+The `CommonLayer` provides shared utilities used across all modules:
+
+- **Domain**: `AuditableEntity` base class for all entities
+- **Middleware**: Authentication, logging, exception handling
+- **Utils**: Date formatting, currency conversion, SKU generation
+- **Schemas**: Common validation schemas
+
+This follows the **Shared Kernel** pattern from Domain-Driven Design.
+
+## Best Practices
+
+### Do's
+
+1. **Keep domain pure**: No framework imports in domain models
+2. **Define clear interfaces**: All ports should have explicit contracts
+3. **One adapter per technology**: Separate HTTP, database, email adapters
+4. **Inject dependencies**: Pass repositories to controllers via constructor
+5. **Use abstract base classes**: Enforce interface compliance in Python
+
+### Don'ts
+
+1. **Don't let domain depend on adapters**: Always depend on ports
+2. **Don't mix concerns**: Controllers shouldn't access database directly
+3. **Don't leak implementation details**: Port interfaces shouldn't expose SQLAlchemy types
+4. **Don't skip the application layer**: Use cases coordinate complex operations
+5. **Don't hardcode adapters**: Use dependency injection or factory patterns
+
+## Related Documentation
+
+- [Architecture Overview](/architecture/overview) - Full system architecture
+- [Database Schema](/architecture/database-schema) - Entity relationships
+- [API Reference](/api-reference) - HTTP endpoints documentation

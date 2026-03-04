@@ -1,0 +1,221 @@
+---
+title: Introduction
+description: Welcome to the Inventory Management System documentation
+mode: custom
+---
+
+<div className="relative overflow-hidden bg-gradient-to-br from-[#2563eb] via-[#1e40af] to-[#1e3a8a] dark:from-[#1e40af] dark:via-[#1e3a8a] dark:to-[#172554] py-20">
+  <div className="max-w-7xl mx-auto px-6 sm:px-8">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+      <div className="lg:col-span-7">
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6">
+          Inventory Management System
+        </h1>
+        <p className="text-lg sm:text-xl text-blue-100 max-w-2xl mb-8">
+          A comprehensive platform for tracking products, managing stock movements, and generating detailed inventory reports with role-based access control.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <a 
+            href="/quickstart" 
+            className="inline-flex items-center px-6 py-3 bg-white text-[#2563eb] font-semibold rounded-lg hover:bg-blue-50 transition-colors"
+          >
+            Get Started
+            <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </a>
+          <a 
+            href="/api/products/overview" 
+            className="inline-flex items-center px-6 py-3 border border-white/30 bg-white/10 text-white font-semibold rounded-lg hover:bg-white/20 transition-colors"
+          >
+            Explore API
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+    Quick start
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Get your inventory system up and running in minutes
+  </p>
+  
+  <Steps>
+    <Step title="Install dependencies">
+      Clone the repository and install the required Python packages.
+      
+      ```bash
+      git clone https://github.com/mauricio-777/InventoryPython.git
+      cd InventoryPython
+      pip install -r requirements.txt
+      ```
+    </Step>
+    
+    <Step title="Start the backend server">
+      Launch the Flask API server on port 8000.
+      
+      ```bash
+      cd backend
+      python main.py
+      ```
+      
+      <Note>The database will be automatically created with default roles and an admin user on first startup.</Note>
+    </Step>
+    
+    <Step title="Start the frontend">
+      In a new terminal, launch the React frontend.
+      
+      ```bash
+      cd frontend
+      npm install
+      npm run dev
+      ```
+      
+      The application will be available at `http://localhost:5173`
+    </Step>
+    
+    <Step title="Log in">
+      Use the default admin credentials to access the system. The credentials are created automatically during the seed process.
+      
+      <Tip>Check the console output from the backend server for the default admin username and password.</Tip>
+    </Step>
+  </Steps>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+    Key features
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Everything you need to manage your inventory effectively
+  </p>
+  
+  <CardGroup cols={2}>
+    <Card title="Product management" icon="box" href="/features/product-management">
+      Track products with SKUs, categories, pricing, and expiration dates
+    </Card>
+    <Card title="Batch tracking" icon="layer-group" href="/features/batch-tracking">
+      Manage inventory by batch with quantity and cost tracking
+    </Card>
+    <Card title="Stock movements" icon="arrows-rotate" href="/features/stock-movements">
+      Record entries, exits, and adjustments with full audit trails
+    </Card>
+    <Card title="Reports & analytics" icon="chart-line" href="/features/inventory-reports">
+      Generate valuation reports, rotation metrics, and dashboard insights
+    </Card>
+    <Card title="Role-based access" icon="shield-halved" href="/users/roles-permissions">
+      Control permissions with Admin, Manager, and Consultant roles
+    </Card>
+    <Card title="Stakeholder management" icon="users" href="/features/stakeholder-management">
+      Manage customers and suppliers with contact information
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+    Explore by topic
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Dive deeper into specific areas of the system
+  </p>
+  
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <a href="/architecture/overview" className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] overflow-hidden hover:border-[#2563eb] dark:hover:border-[#2563eb] transition-colors no-underline bg-white dark:bg-[#1a1d27]">
+      <div className="p-6">
+        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2">
+          Architecture
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+          Understand the hexagonal architecture and system design patterns
+        </p>
+        <div className="flex items-center text-sm font-medium text-[#2563eb] group-hover:text-[#1e40af]">
+          Learn more
+          <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    </a>
+    
+    <a href="/users/authentication" className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] overflow-hidden hover:border-[#2563eb] dark:hover:border-[#2563eb] transition-colors no-underline bg-white dark:bg-[#1a1d27]">
+      <div className="p-6">
+        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2">
+          User management
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+          Set up authentication, manage users, and configure role-based permissions
+        </p>
+        <div className="flex items-center text-sm font-medium text-[#2563eb] group-hover:text-[#1e40af]">
+          Learn more
+          <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    </a>
+    
+    <a href="/api/products/overview" className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] overflow-hidden hover:border-[#2563eb] dark:hover:border-[#2563eb] transition-colors no-underline bg-white dark:bg-[#1a1d27]">
+      <div className="p-6">
+        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2">
+          API reference
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+          Complete REST API documentation with endpoints, parameters, and examples
+        </p>
+        <div className="flex items-center text-sm font-medium text-[#2563eb] group-hover:text-[#1e40af]">
+          Learn more
+          <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    </a>
+    
+    <a href="/features/inventory-reports" className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] overflow-hidden hover:border-[#2563eb] dark:hover:border-[#2563eb] transition-colors no-underline bg-white dark:bg-[#1a1d27]">
+      <div className="p-6">
+        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2">
+          Reports & dashboards
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+          Generate inventory valuation, rotation analysis, and real-time metrics
+        </p>
+        <div className="flex items-center text-sm font-medium text-[#2563eb] group-hover:text-[#1e40af]">
+          Learn more
+          <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    </a>
+  </div>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="rounded-2xl border border-gray-200 dark:border-[#27272a] bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-[#1a1d27] dark:to-[#242838] p-8 sm:p-12">
+    <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+      Ready to get started?
+    </h2>
+    <p className="text-base text-gray-600 dark:text-gray-400 mb-6 max-w-2xl">
+      Follow our quickstart guide to set up your inventory management system in minutes, or explore the full documentation to learn about advanced features.
+    </p>
+    <div className="flex flex-wrap gap-4">
+      <a 
+        href="/quickstart" 
+        className="inline-flex items-center px-6 py-3 bg-[#2563eb] text-white font-semibold rounded-lg hover:bg-[#1e40af] transition-colors"
+      >
+        View quickstart
+      </a>
+      <a 
+        href="/installation" 
+        className="inline-flex items-center px-6 py-3 border border-gray-300 dark:border-[#27272a] bg-white dark:bg-[#1a1d27] text-gray-900 dark:text-white font-semibold rounded-lg hover:bg-gray-50 dark:hover:bg-[#242838] transition-colors"
+      >
+        Installation guide
+      </a>
+    </div>
+  </div>
+</div>

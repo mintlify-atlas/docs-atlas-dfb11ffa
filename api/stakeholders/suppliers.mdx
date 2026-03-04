@@ -1,0 +1,429 @@
+---
+title: 'Suppliers API'
+description: 'Manage supplier information and purchasing relationships'
+---
+
+## Overview
+
+The Suppliers API allows you to create, retrieve, update, and delete supplier records in the inventory management system. Suppliers have delivery terms and purchase conditions specific to procurement operations.
+
+**Base URL:** `/api/v1/suppliers`
+
+## Authentication
+
+All endpoints require JWT authentication via Bearer token in the Authorization header.
+
+## Create Supplier
+
+<api-endpoint method="POST" path="/api/v1/suppliers/" />
+
+Create a new supplier record.
+
+**Required Roles:** `admin`, `gestor`
+
+### Request Body
+
+<property name="nombre" type="string" required>
+  Supplier name
+</property>
+
+<property name="numero_documento" type="string" required>
+  Document number (must be unique)
+</property>
+
+<property name="tipo_documento" type="string" default="RUC">
+  Document type (e.g., RUC, DNI, CE)
+</property>
+
+<property name="direccion" type="string">
+  Supplier address
+</property>
+
+<property name="telefono" type="string">
+  Phone number
+</property>
+
+<property name="email" type="string">
+  Email address (must be unique if provided)
+</property>
+
+<property name="plazo_entrega_dias" type="integer">
+  Delivery time in days
+</property>
+
+<property name="condiciones_compra" type="string">
+  Purchase conditions and terms
+</property>
+
+### Request Example
+
+```python
+import requests
+
+url = "http://localhost:5000/api/v1/suppliers/"
+headers = {
+    "Authorization": "Bearer YOUR_JWT_TOKEN",
+    "Content-Type": "application/json"
+}
+
+payload = {
+    "nombre": "Distribuidora ABC S.A.C.",
+    "tipo_documento": "RUC",
+    "numero_documento": "20123456789",
+    "direccion": "Av. Industrial 500, Callao",
+    "telefono": "+51 014567890",
+    "email": "ventas@distribuidoraabc.com",
+    "plazo_entrega_dias": 7,
+    "condiciones_compra": "Pago 50% adelantado, 50% contra entrega"
+}
+
+response = requests.post(url, json=payload, headers=headers)
+print(response.json())
+```
+
+### Response
+
+<CodeGroup>
+```json 201 Created
+{
+  "id": "770e8400-e29b-41d4-a716-446655440002",
+  "nombre": "Distribuidora ABC S.A.C.",
+  "tipo_documento": "RUC",
+  "numero_documento": "20123456789",
+  "direccion": "Av. Industrial 500, Callao",
+  "telefono": "+51 014567890",
+  "email": "ventas@distribuidoraabc.com",
+  "plazo_entrega_dias": 7,
+  "condiciones_compra": "Pago 50% adelantado, 50% contra entrega"
+}
+```
+
+```json 400 Bad Request
+{
+  "error": "Missing required fields: nombre, numero_documento"
+}
+```
+
+```json 409 Conflict
+{
+  "error": "A supplier with this document number already exists"
+}
+```
+</CodeGroup>
+
+---
+
+## List Suppliers
+
+<api-endpoint method="GET" path="/api/v1/suppliers/" />
+
+Retrieve a list of all suppliers with optional search and pagination.
+
+**Required Roles:** `admin`, `gestor`, `consultor`
+
+### Query Parameters
+
+<property name="skip" type="integer" default="0">
+  Number of records to skip (for pagination)
+</property>
+
+<property name="limit" type="integer" default="100">
+  Maximum number of records to return
+</property>
+
+<property name="q" type="string">
+  Search query to filter suppliers by name, document, or email
+</property>
+
+### Request Example
+
+```python
+import requests
+
+url = "http://localhost:5000/api/v1/suppliers/"
+headers = {
+    "Authorization": "Bearer YOUR_JWT_TOKEN"
+}
+
+params = {
+    "skip": 0,
+    "limit": 10,
+    "q": "Distribuidora"
+}
+
+response = requests.get(url, params=params, headers=headers)
+print(response.json())
+```
+
+### Response
+
+```json 200 OK
+[
+  {
+    "id": "770e8400-e29b-41d4-a716-446655440002",
+    "nombre": "Distribuidora ABC S.A.C.",
+    "tipo_documento": "RUC",
+    "numero_documento": "20123456789",
+    "direccion": "Av. Industrial 500, Callao",
+    "telefono": "+51 014567890",
+    "email": "ventas@distribuidoraabc.com",
+    "plazo_entrega_dias": 7,
+    "condiciones_compra": "Pago 50% adelantado, 50% contra entrega"
+  },
+  {
+    "id": "880e8400-e29b-41d4-a716-446655440003",
+    "nombre": "Importaciones XYZ E.I.R.L.",
+    "tipo_documento": "RUC",
+    "numero_documento": "20987654321",
+    "direccion": "Jr. Importadores 200, Lima",
+    "telefono": "+51 017654321",
+    "email": "contacto@importacionesxyz.com",
+    "plazo_entrega_dias": 15,
+    "condiciones_compra": "Crédito 30 días"
+  }
+]
+```
+
+---
+
+## Get Supplier
+
+<api-endpoint method="GET" path="/api/v1/suppliers/{supplier_id}" />
+
+Retrieve details of a specific supplier by ID.
+
+**Required Roles:** `admin`, `gestor`, `consultor`
+
+### Path Parameters
+
+<property name="supplier_id" type="string" required>
+  UUID of the supplier
+</property>
+
+### Request Example
+
+```python
+import requests
+
+supplier_id = "770e8400-e29b-41d4-a716-446655440002"
+url = f"http://localhost:5000/api/v1/suppliers/{supplier_id}"
+headers = {
+    "Authorization": "Bearer YOUR_JWT_TOKEN"
+}
+
+response = requests.get(url, headers=headers)
+print(response.json())
+```
+
+### Response
+
+<CodeGroup>
+```json 200 OK
+{
+  "id": "770e8400-e29b-41d4-a716-446655440002",
+  "nombre": "Distribuidora ABC S.A.C.",
+  "tipo_documento": "RUC",
+  "numero_documento": "20123456789",
+  "direccion": "Av. Industrial 500, Callao",
+  "telefono": "+51 014567890",
+  "email": "ventas@distribuidoraabc.com",
+  "plazo_entrega_dias": 7,
+  "condiciones_compra": "Pago 50% adelantado, 50% contra entrega"
+}
+```
+
+```json 404 Not Found
+{
+  "detail": "Supplier not found"
+}
+```
+</CodeGroup>
+
+---
+
+## Update Supplier
+
+<api-endpoint method="PUT" path="/api/v1/suppliers/{supplier_id}" />
+<api-endpoint method="PATCH" path="/api/v1/suppliers/{supplier_id}" />
+
+Update an existing supplier's information. Both PUT and PATCH methods are supported for partial updates.
+
+**Required Roles:** `admin`, `gestor`
+
+### Path Parameters
+
+<property name="supplier_id" type="string" required>
+  UUID of the supplier to update
+</property>
+
+### Request Body
+
+All fields are optional. Only include fields you want to update.
+
+<property name="nombre" type="string">
+  Supplier name
+</property>
+
+<property name="tipo_documento" type="string">
+  Document type
+</property>
+
+<property name="numero_documento" type="string">
+  Document number
+</property>
+
+<property name="direccion" type="string">
+  Supplier address
+</property>
+
+<property name="telefono" type="string">
+  Phone number
+</property>
+
+<property name="email" type="string">
+  Email address
+</property>
+
+<property name="plazo_entrega_dias" type="integer">
+  Delivery time in days
+</property>
+
+<property name="condiciones_compra" type="string">
+  Purchase conditions
+</property>
+
+### Request Example
+
+```python
+import requests
+
+supplier_id = "770e8400-e29b-41d4-a716-446655440002"
+url = f"http://localhost:5000/api/v1/suppliers/{supplier_id}"
+headers = {
+    "Authorization": "Bearer YOUR_JWT_TOKEN",
+    "Content-Type": "application/json"
+}
+
+payload = {
+    "plazo_entrega_dias": 5,
+    "telefono": "+51 014567899"
+}
+
+response = requests.put(url, json=payload, headers=headers)
+print(response.json())
+```
+
+### Response
+
+<CodeGroup>
+```json 200 OK
+{
+  "id": "770e8400-e29b-41d4-a716-446655440002",
+  "nombre": "Distribuidora ABC S.A.C.",
+  "tipo_documento": "RUC",
+  "numero_documento": "20123456789",
+  "direccion": "Av. Industrial 500, Callao",
+  "telefono": "+51 014567899",
+  "email": "ventas@distribuidoraabc.com",
+  "plazo_entrega_dias": 5,
+  "condiciones_compra": "Pago 50% adelantado, 50% contra entrega"
+}
+```
+
+```json 404 Not Found
+{
+  "detail": "Supplier not found"
+}
+```
+
+```json 409 Conflict
+{
+  "error": "Another supplier with this document number already exists"
+}
+```
+</CodeGroup>
+
+---
+
+## Delete Supplier
+
+<api-endpoint method="DELETE" path="/api/v1/suppliers/{supplier_id}" />
+
+Delete a supplier from the system.
+
+**Required Roles:** `admin`, `gestor`
+
+### Path Parameters
+
+<property name="supplier_id" type="string" required>
+  UUID of the supplier to delete
+</property>
+
+### Request Example
+
+```python
+import requests
+
+supplier_id = "770e8400-e29b-41d4-a716-446655440002"
+url = f"http://localhost:5000/api/v1/suppliers/{supplier_id}"
+headers = {
+    "Authorization": "Bearer YOUR_JWT_TOKEN"
+}
+
+response = requests.delete(url, headers=headers)
+print(response.json())
+```
+
+### Response
+
+<CodeGroup>
+```json 200 OK
+{
+  "message": "Supplier deleted successfully"
+}
+```
+
+```json 404 Not Found
+{
+  "detail": "Supplier not found"
+}
+```
+
+```json 409 Conflict
+{
+  "error": "Cannot delete supplier because they have related transactions"
+}
+```
+</CodeGroup>
+
+<Warning>
+  Suppliers with existing transactions (purchase orders, receipts, etc.) cannot be deleted due to referential integrity constraints. Consider marking them as inactive instead if your business logic supports it.
+</Warning>
+
+## Error Codes
+
+| Status Code | Description |
+|-------------|-------------|
+| 200 | Success |
+| 201 | Created |
+| 400 | Bad Request - Missing required fields or validation error |
+| 401 | Unauthorized - Invalid or missing JWT token |
+| 403 | Forbidden - Insufficient permissions for the operation |
+| 404 | Not Found - Supplier does not exist |
+| 409 | Conflict - Duplicate document number or email, or integrity constraint violation |
+
+## Data Models
+
+### Supplier Object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string (UUID) | Unique identifier |
+| nombre | string | Supplier name |
+| tipo_documento | string | Document type (RUC, DNI, CE, etc.) |
+| numero_documento | string | Document number (unique) |
+| direccion | string | Physical address |
+| telefono | string | Contact phone number |
+| email | string | Email address (unique) |
+| plazo_entrega_dias | integer | Standard delivery time in days |
+| condiciones_compra | string | Purchase terms and conditions |

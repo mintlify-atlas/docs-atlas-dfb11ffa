@@ -1,0 +1,91 @@
+---
+title: "Products Overview"
+description: "API endpoints for managing products in the inventory system"
+---
+
+## Base URL
+
+All product endpoints are prefixed with:
+
+```
+/api/v1/products
+```
+
+## Available Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Create Product" icon="plus" href="/api/products/create">
+    Create a new product in the inventory
+  </Card>
+  <Card title="List Products" icon="list" href="/api/products/list">
+    Retrieve all products with pagination
+  </Card>
+  <Card title="Update Prices" icon="dollar-sign" href="/api/products/update-prices">
+    Bulk update product prices
+  </Card>
+  <Card title="Price History" icon="clock-rotate-left" href="/api/products/price-history">
+    View price change history for a product
+  </Card>
+</CardGroup>
+
+## Authentication
+
+All product endpoints require authentication with role-based access control:
+
+- **admin**: Full access to all operations
+- **gestor**: Can create, update, and view products
+- **consultor**: Read-only access to product information
+
+## Product Schema
+
+Products in the system have the following structure:
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the product (UUID format)
+</ResponseField>
+
+<ResponseField name="sku" type="string" required>
+  Stock Keeping Unit - unique product code
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Product name
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Detailed product description
+</ResponseField>
+
+<ResponseField name="category" type="string" required>
+  Product category for organization
+</ResponseField>
+
+<ResponseField name="unit_measure" type="string" required>
+  Unit of measurement (e.g., "kg", "liters", "units")
+</ResponseField>
+
+<ResponseField name="unit_value" type="number" required>
+  Value per unit (default: 1.0)
+</ResponseField>
+
+<ResponseField name="is_perishable" type="boolean" required>
+  Indicates if product has expiration date (default: false)
+</ResponseField>
+
+<ResponseField name="expiration_date" type="string">
+  Expiration date for perishable products
+</ResponseField>
+
+<ResponseField name="suggested_price" type="number" required>
+  Recommended selling price
+</ResponseField>
+
+## Common Query Parameters
+
+<ParamField query="skip" type="integer" default="0">
+  Number of records to skip for pagination
+</ParamField>
+
+<ParamField query="limit" type="integer" default="100">
+  Maximum number of records to return
+</ParamField>

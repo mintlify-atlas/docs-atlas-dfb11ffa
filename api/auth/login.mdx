@@ -1,0 +1,172 @@
+---
+title: "Login"
+api: "POST /api/v1/auth/login"
+description: "Authenticate a user and return user information"
+---
+
+## Overview
+
+The login endpoint authenticates users by validating their username and password credentials. Upon successful authentication, it returns the user's profile information. Note that JWT token generation is planned for a future release (Epic 3.2).
+
+## Request
+
+<ParamField body="username" type="string" required>
+  The username of the user attempting to log in
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The user's password
+</ParamField>
+
+### Example Request
+
+```bash
+curl -X POST https://api.example.com/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "john_doe",
+    "password": "securePassword123"
+  }'
+```
+
+## Response
+
+<ResponseField name="status" type="string">
+  Status of the request. Returns "success" for successful authentication
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable message describing the result
+</ResponseField>
+
+<ResponseField name="user" type="object">
+  User profile information
+  
+  <ResponseField name="user.id" type="string">
+    Unique identifier for the user
+  </ResponseField>
+  
+  <ResponseField name="user.username" type="string">
+    The user's username
+  </ResponseField>
+  
+  <ResponseField name="user.email" type="string">
+    The user's email address
+  </ResponseField>
+  
+  <ResponseField name="user.active" type="boolean">
+    Whether the user account is active
+  </ResponseField>
+  
+  <ResponseField name="user.role_id" type="integer">
+    The ID of the user's role
+  </ResponseField>
+  
+  <ResponseField name="user.role_name" type="string">
+    The name of the user's role (e.g., "admin", "manager", "employee")
+  </ResponseField>
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "status": "success",
+  "message": "Login exitoso",
+  "user": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "username": "john_doe",
+    "email": "john.doe@example.com",
+    "active": true,
+    "role_id": 2,
+    "role_name": "manager"
+  }
+}
+```
+
+## Error Responses
+
+<ResponseField name="status" type="string">
+  Returns "error" when authentication fails
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Description of the error
+</ResponseField>
+
+### 400 Bad Request
+
+Returned when required fields are missing:
+
+```json
+{
+  "status": "error",
+  "message": "Body requerido."
+}
+```
+
+```json
+{
+  "status": "error",
+  "message": "Username y password son requeridos."
+}
+```
+
+### 401 Unauthorized
+
+Returned when credentials are invalid or user is inactive:
+
+```json
+{
+  "status": "error",
+  "message": "Credenciales inválidas"
+}
+```
+
+### 500 Internal Server Error
+
+Returned when an unexpected error occurs:
+
+```json
+{
+  "status": "error",
+  "message": "Error interno del servidor"
+}
+```
+
+## Implementation Reference
+
+The login endpoint is implemented in `backend/Auth/Adapters/auth_controller.py:14-46`:
+
+```python
+@router.route('/login', methods=['POST'])
+def login():
+    """Endpoint para iniciar sesión."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"status": "error", "message": "Body requerido."}), 400
+
+        username = data.get('username')
+        password = data.get('password')
+
+        if not username or not password:
+            return jsonify({"status": "error", "message": "Username y password son requeridos."}), 400
+
+        db = next(get_db())
+        service = _get_service(db)
+        
+        user = service.login(username, password)
+        
+        return jsonify({
+            "status": "success",
+            "message": "Login exitoso",
+            "user": user.to_dict()
+        }), 200
+
+    except ValueError as ve:
+        return jsonify({"status": "error", "message": str(ve)}), 401
+    except Exception as e:
+        logger.error("Error inesperado en login: %s", e)
+        return jsonify({"status": "error", "message": "Error interno del servidor"}), 500
+```

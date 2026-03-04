@@ -1,0 +1,517 @@
+---
+title: 'User Management'
+description: 'Manage users in the Inventory Management System'
+---
+
+<Note>
+All user management endpoints require **admin** role authentication.
+</Note>
+
+## List Users
+
+<api-endpoint method="GET" path="/api/v1/users/" />
+
+Retrieve a paginated list of all users in the system.
+
+### Query Parameters
+
+<ParamField query="skip" type="integer" default="0">
+  Number of users to skip for pagination
+</ParamField>
+
+<ParamField query="limit" type="integer" default="100">
+  Maximum number of users to return
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Operation status (`success` or `error`)
+</ResponseField>
+
+<ResponseField name="count" type="integer">
+  Number of users returned
+</ResponseField>
+
+<ResponseField name="users" type="array">
+  Array of user objects with their details
+  <Expandable title="User Object">
+    <ResponseField name="id" type="string">
+      Unique user identifier
+    </ResponseField>
+    <ResponseField name="username" type="string">
+      User's username
+    </ResponseField>
+    <ResponseField name="email" type="string">
+      User's email address
+    </ResponseField>
+    <ResponseField name="role_id" type="integer">
+      ID of the user's role
+    </ResponseField>
+    <ResponseField name="is_active" type="boolean">
+      Whether the user is active
+    </ResponseField>
+    <ResponseField name="created_at" type="string">
+      Timestamp of user creation
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl -X GET "https://api.example.com/api/v1/users/?skip=0&limit=10" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    "https://api.example.com/api/v1/users/",
+    headers={"Authorization": "Bearer YOUR_ADMIN_TOKEN"},
+    params={"skip": 0, "limit": 10}
+)
+users = response.json()
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200 Success
+{
+  "status": "success",
+  "count": 2,
+  "users": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "username": "admin",
+      "email": "admin@example.com",
+      "role_id": 1,
+      "is_active": true,
+      "created_at": "2024-01-15T10:30:00Z"
+    },
+    {
+      "id": "660e8400-e29b-41d4-a716-446655440001",
+      "username": "warehouse_manager",
+      "email": "manager@example.com",
+      "role_id": 2,
+      "is_active": true,
+      "created_at": "2024-01-16T14:20:00Z"
+    }
+  ]
+}
+```
+
+```json 500 Error
+{
+  "status": "error",
+  "message": "Database connection failed"
+}
+```
+</ResponseExample>
+
+---
+
+## Get User by ID
+
+<api-endpoint method="GET" path="/api/v1/users/{user_id}" />
+
+Retrieve detailed information about a specific user.
+
+### Path Parameters
+
+<ParamField path="user_id" type="string" required>
+  Unique identifier of the user
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Operation status (`success` or `error`)
+</ResponseField>
+
+<ResponseField name="user" type="object">
+  User details object
+</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl -X GET "https://api.example.com/api/v1/users/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+```python Python
+import requests
+
+user_id = "550e8400-e29b-41d4-a716-446655440000"
+response = requests.get(
+    f"https://api.example.com/api/v1/users/{user_id}",
+    headers={"Authorization": "Bearer YOUR_ADMIN_TOKEN"}
+)
+user = response.json()
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200 Success
+{
+  "status": "success",
+  "user": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "username": "admin",
+    "email": "admin@example.com",
+    "role_id": 1,
+    "is_active": true,
+    "created_at": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+```json 404 Not Found
+{
+  "status": "error",
+  "message": "Usuario no encontrado."
+}
+```
+</ResponseExample>
+
+---
+
+## Create User
+
+<api-endpoint method="POST" path="/api/v1/users/" />
+
+Create a new user account. Automatically sends a welcome email to the new user.
+
+### Request Body
+
+<ParamField body="username" type="string" required>
+  Unique username for the new user
+</ParamField>
+
+<ParamField body="email" type="string" required>
+  Email address for the new user
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Password for the new user account
+</ParamField>
+
+<ParamField body="role_id" type="integer" required>
+  Role ID to assign to the user (1=admin, 2=manager, 3=operator)
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Operation status (`success` or `error`)
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Confirmation message
+</ResponseField>
+
+<ResponseField name="user" type="object">
+  Created user object
+</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl -X POST "https://api.example.com/api/v1/users/" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "new_operator",
+    "email": "operator@example.com",
+    "password": "SecurePass123!",
+    "role_id": 3
+  }'
+```
+
+```python Python
+import requests
+
+data = {
+    "username": "new_operator",
+    "email": "operator@example.com",
+    "password": "SecurePass123!",
+    "role_id": 3
+}
+
+response = requests.post(
+    "https://api.example.com/api/v1/users/",
+    headers={
+        "Authorization": "Bearer YOUR_ADMIN_TOKEN",
+        "Content-Type": "application/json"
+    },
+    json=data
+)
+result = response.json()
+```
+</RequestExample>
+
+<ResponseExample>
+```json 201 Created
+{
+  "status": "success",
+  "message": "Usuario 'new_operator' creado exitosamente.",
+  "user": {
+    "id": "770e8400-e29b-41d4-a716-446655440002",
+    "username": "new_operator",
+    "email": "operator@example.com",
+    "role_id": 3,
+    "is_active": true,
+    "created_at": "2024-03-04T09:15:00Z"
+  }
+}
+```
+
+```json 400 Bad Request
+{
+  "status": "error",
+  "message": "Campos requeridos: username, password"
+}
+```
+</ResponseExample>
+
+---
+
+## Update User
+
+<api-endpoint method="PUT" path="/api/v1/users/{user_id}" />
+
+Update an existing user's information.
+
+### Path Parameters
+
+<ParamField path="user_id" type="string" required>
+  Unique identifier of the user to update
+</ParamField>
+
+### Request Body
+
+<ParamField body="username" type="string">
+  New username (optional)
+</ParamField>
+
+<ParamField body="email" type="string">
+  New email address (optional)
+</ParamField>
+
+<ParamField body="password" type="string">
+  New password (optional)
+</ParamField>
+
+<ParamField body="role_id" type="integer">
+  New role ID (optional)
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Operation status (`success` or `error`)
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Confirmation message
+</ResponseField>
+
+<ResponseField name="user" type="object">
+  Updated user object
+</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl -X PUT "https://api.example.com/api/v1/users/770e8400-e29b-41d4-a716-446655440002" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "new.email@example.com",
+    "role_id": 2
+  }'
+```
+
+```python Python
+import requests
+
+user_id = "770e8400-e29b-41d4-a716-446655440002"
+data = {
+    "email": "new.email@example.com",
+    "role_id": 2
+}
+
+response = requests.put(
+    f"https://api.example.com/api/v1/users/{user_id}",
+    headers={
+        "Authorization": "Bearer YOUR_ADMIN_TOKEN",
+        "Content-Type": "application/json"
+    },
+    json=data
+)
+result = response.json()
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200 Success
+{
+  "status": "success",
+  "message": "Usuario actualizado correctamente.",
+  "user": {
+    "id": "770e8400-e29b-41d4-a716-446655440002",
+    "username": "new_operator",
+    "email": "new.email@example.com",
+    "role_id": 2,
+    "is_active": true,
+    "created_at": "2024-03-04T09:15:00Z"
+  }
+}
+```
+
+```json 400 Bad Request
+{
+  "status": "error",
+  "message": "Invalid role_id"
+}
+```
+</ResponseExample>
+
+---
+
+## Deactivate User
+
+<api-endpoint method="PATCH" path="/api/v1/users/{user_id}/deactivate" />
+
+Deactivate a user account. This prevents the user from logging in but preserves their data.
+
+### Path Parameters
+
+<ParamField path="user_id" type="string" required>
+  Unique identifier of the user to deactivate
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Operation status (`success` or `error`)
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Confirmation message with username
+</ResponseField>
+
+<ResponseField name="user" type="object">
+  Updated user object with is_active set to false
+</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl -X PATCH "https://api.example.com/api/v1/users/770e8400-e29b-41d4-a716-446655440002/deactivate" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+```python Python
+import requests
+
+user_id = "770e8400-e29b-41d4-a716-446655440002"
+response = requests.patch(
+    f"https://api.example.com/api/v1/users/{user_id}/deactivate",
+    headers={"Authorization": "Bearer YOUR_ADMIN_TOKEN"}
+)
+result = response.json()
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200 Success
+{
+  "status": "success",
+  "message": "Usuario 'new_operator' desactivado.",
+  "user": {
+    "id": "770e8400-e29b-41d4-a716-446655440002",
+    "username": "new_operator",
+    "email": "new.email@example.com",
+    "role_id": 2,
+    "is_active": false,
+    "created_at": "2024-03-04T09:15:00Z"
+  }
+}
+```
+
+```json 400 Bad Request
+{
+  "status": "error",
+  "message": "User already deactivated"
+}
+```
+</ResponseExample>
+
+---
+
+## List Roles
+
+<api-endpoint method="GET" path="/api/v1/users/roles" />
+
+Retrieve all available user roles in the system.
+
+### Response
+
+<ResponseField name="status" type="string">
+  Operation status (`success` or `error`)
+</ResponseField>
+
+<ResponseField name="roles" type="array">
+  Array of role objects
+  <Expandable title="Role Object">
+    <ResponseField name="id" type="integer">
+      Role ID
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Role name (e.g., admin, manager, operator)
+    </ResponseField>
+    <ResponseField name="description" type="string">
+      Role description
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl -X GET "https://api.example.com/api/v1/users/roles" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    "https://api.example.com/api/v1/users/roles",
+    headers={"Authorization": "Bearer YOUR_ADMIN_TOKEN"}
+)
+roles = response.json()
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200 Success
+{
+  "status": "success",
+  "roles": [
+    {
+      "id": 1,
+      "name": "admin",
+      "description": "Full system access"
+    },
+    {
+      "id": 2,
+      "name": "manager",
+      "description": "Warehouse management access"
+    },
+    {
+      "id": 3,
+      "name": "operator",
+      "description": "Basic inventory operations"
+    }
+  ]
+}
+```
+</ResponseExample>

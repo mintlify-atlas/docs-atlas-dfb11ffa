@@ -1,0 +1,189 @@
+---
+title: "Register Sale (EXIT Movement)"
+api: "POST /api/v1/movements/sale"
+description: "Register a sale or stock exit with automatic FIFO cost calculation"
+---
+
+## Overview
+
+This endpoint registers an EXIT movement for a product sale. The system automatically:
+- Deducts stock from the oldest batches first (FIFO)
+- Calculates the actual cost of goods sold (COGS)
+- Returns both the sale price and the cost for profit analysis
+
+## Authentication
+
+<ParamField path="Authorization" type="string" required>
+  Bearer token with `admin` or `gestor` role
+</ParamField>
+
+## Request Body
+
+<ParamField path="product_id" type="string" required>
+  Unique identifier of the product being sold
+</ParamField>
+
+<ParamField path="quantity" type="integer" required>
+  Number of units to sell (must be greater than 0)
+</ParamField>
+
+<ParamField path="unit_price" type="float" optional>
+  Sale price per unit. If not provided, uses the product's `suggested_price`
+</ParamField>
+
+<ParamField path="notes" type="string" optional>
+  Additional notes about the sale. Defaults to "Sale"
+</ParamField>
+
+## Response
+
+<ResponseField name="movement_id" type="string">
+  Unique identifier for the created movement
+</ResponseField>
+
+<ResponseField name="product_id" type="string">
+  Product identifier
+</ResponseField>
+
+<ResponseField name="quantity" type="integer">
+  Number of units sold
+</ResponseField>
+
+<ResponseField name="unit_price" type="float">
+  Sale price per unit applied
+</ResponseField>
+
+<ResponseField name="total_price" type="float">
+  Total revenue (quantity * unit_price)
+</ResponseField>
+
+<ResponseField name="total_cost" type="float">
+  Total cost of goods sold calculated via FIFO
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST https://api.example.com/api/v1/movements/sale \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product_id": "550e8400-e29b-41d4-a716-446655440000",
+    "quantity": 10,
+    "unit_price": 29.99,
+    "notes": "Sold to customer ABC"
+  }'
+```
+
+## Example Response
+
+```json
+{
+  "movement_id": "7f3d9c8e-1234-5678-90ab-cdef12345678",
+  "product_id": "550e8400-e29b-41d4-a716-446655440000",
+  "quantity": 10,
+  "unit_price": 29.99,
+  "total_price": 299.90,
+  "total_cost": 180.50
+}
+```
+
+In this example:
+- **Revenue**: $299.90 (10 units × $29.99)
+- **Cost**: $180.50 (FIFO calculated from batches)
+- **Gross Profit**: $119.40 ($299.90 - $180.50)
+
+## Error Responses
+
+<ResponseExample>
+```json 400 Bad Request - Missing Fields
+{
+  "error": "Missing required fields"
+}
+```
+
+```json 400 Bad Request - Insufficient Stock
+{
+  "detail": "Insufficient stock"
+}
+```
+
+```json 400 Bad Request - Invalid Quantity
+{
+  "detail": "Quantity must be greater than 0"
+}
+```
+
+```json 404 Not Found
+{
+  "detail": "Product not found"
+}
+```
+
+```json 401 Unauthorized
+{
+  "error": "Unauthorized"
+}
+```
+
+```json 403 Forbidden
+{
+  "error": "Insufficient permissions"
+}
+```
+</ResponseExample>
+
+## Implementation Details
+
+From `backend/Product/Adapters/movement_controller.py:11-42`:
+
+```python
+@router.route('/sale', methods=['POST'])
+@require_role('admin', 'gestor')
+def register_sale():
+    data = request.get_json()
+    if not data or not data.get('product_id') or not data.get('quantity'):
+        return jsonify({"error": "Missing required fields"}), 400
+
+    db = next(get_db())
+    stock_svc = StockService(db)
+    
+    try:
+        unit_price = data.get('unit_price')
+        if unit_price is not None:
+            unit_price = float(unit_price)
+
+        mov, cost = stock_svc.register_exit(
+            product_id=data.get('product_id'),
+            quantity=int(data.get('quantity')),
+            unit_price=unit_price,
+            notes=data.get('notes', 'Sale')
+        )
+        
+        return jsonify({
+            "movement_id": mov.id,
+            "product_id": mov.product_id,
+            "quantity": mov.quantity,
+            "unit_price": mov.unit_price,
+            "total_price": mov.total_price,
+            "total_cost": cost
+        }), 200
+    except Exception as e:
+        return jsonify({"detail": str(e)}), 400
+```
+
+## FIFO Cost Calculation
+
+The EXIT movement uses FIFO logic from `backend/Product/Domain/stock_service.py:57-109`:
+
+1. Retrieves all active batches sorted by expiration date, then purchase date
+2. Deducts quantity from the oldest batches first
+3. Calculates total cost by summing: `quantity_from_batch * batch.unit_cost`
+4. Updates batch quantities and creates the movement record
+5. Returns both the movement object and the calculated COGS
+
+## See Also
+
+- [List Movements](/api/movements/list) - Query movement history
+- [Batches API](/api/batches/overview) - View underlying batch data
+- [Products API](/api/products/overview) - Manage product information

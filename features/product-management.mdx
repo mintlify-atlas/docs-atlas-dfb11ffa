@@ -1,0 +1,317 @@
+---
+title: 'Product Management'
+description: 'Comprehensive product catalog management with SKU generation, categories, pricing, and expiration tracking'
+icon: 'box'
+---
+
+## Overview
+
+The Product Management system provides a complete solution for managing your inventory catalog. Each product is tracked with detailed attributes including automatic SKU generation, categorization, pricing history, and perishable goods management.
+
+<Note>
+  Products are the foundation of the inventory system. All batches, movements, and reports are linked to products.
+</Note>
+
+## Product Data Model
+
+Products in the system contain the following attributes:
+
+<CodeGroup>
+```python backend/Product/Domain/product.py
+class Product(Base, AuditableEntity):
+    __tablename__ = "products"
+
+    id = Column(String(50), primary_key=True, index=True)
+    sku = Column(String(100), unique=True, index=True, nullable=False)
+    name = Column(String(200), index=True, nullable=False)
+    description = Column(String(500), nullable=True)
+    category = Column(String(100), index=True, nullable=False)
+    unit_measure = Column(String(50), nullable=False)
+    unit_value = Column(Float, default=1.0, nullable=False)
+    is_perishable = Column(Boolean, default=False, nullable=False)
+    expiration_date = Column(String(50), nullable=True)
+    suggested_price = Column(Float, nullable=False)
+```
+</CodeGroup>
+
+### Key Attributes
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | String | Unique identifier (UUID) |
+| `sku` | String | Stock Keeping Unit (auto-generated) |
+| `name` | String | Product name |
+| `category` | String | Product category for grouping |
+| `unit_measure` | String | Unit of measurement (e.g., "kg", "units", "liters") |
+| `unit_value` | Float | Value per unit (default: 1.0) |
+| `is_perishable` | Boolean | Whether product has expiration dates |
+| `suggested_price` | Float | Recommended selling price |
+
+## SKU Generation
+
+The system automatically generates unique SKU codes for each product using a combination of category prefix, name prefix, and a unique identifier.
+
+<CodeGroup>
+```python backend/CommonLayer/utils/sku_generator.py
+def generate_sku(category: str, name: str) -> str:
+    cat_prefix = category[:3].upper() if category else "GEN"
+    name_prefix = name[:3].upper() if name else "PRD"
+    unique_suffix = str(uuid.uuid4())[:6].upper()
+    return f"{cat_prefix}-{name_prefix}-{unique_suffix}"
+```
+</CodeGroup>
+
+### SKU Format
+
+<Steps>
+  <Step title="Category Prefix">
+    First 3 characters of the category in uppercase (e.g., "BEB" for Beverages)
+  </Step>
+  <Step title="Name Prefix">
+    First 3 characters of the product name in uppercase (e.g., "COC" for Coca-Cola)
+  </Step>
+  <Step title="Unique Suffix">
+    6-character UUID segment for uniqueness (e.g., "A3F2D1")
+  </Step>
+</Steps>
+
+**Example SKU:** `BEB-COC-A3F2D1`
+
+## Creating Products
+
+Products are created through the API with role-based access control. Only administrators and managers can create products.
+
+<CodeGroup>
+```python backend/Product/Adapters/product_controller.py
+@router.route('/', methods=['POST'])
+@require_role('admin', 'gestor')
+def create_product():
+    data = request.get_json()
+    if not data or not data.get('name') or not data.get('category') \
+       or not data.get('unit_measure') or not data.get('sku'):
+        return jsonify({"error": "Missing required fields"}), 400
+
+    new_product = Product(
+        id=str(uuid.uuid4()),
+        sku=data.get('sku'),
+        name=data.get('name'),
+        description=data.get('description'),
+        category=data.get('category'),
+        unit_measure=data.get('unit_measure'),
+        unit_value=float(data.get('unit_value', 1.0)),
+        is_perishable=data.get('is_perishable', False),
+        expiration_date=data.get('expiration_date'),
+        suggested_price=float(data.get('suggested_price', 0))
+    )
+    product = repo.create(new_product)
+    return jsonify({...}), 201
+```
+</CodeGroup>
+
+### API Endpoint
+
+<Card title="Create Product" icon="plus" href="/api/products/create">
+  **POST** `/api/v1/products/`
+  
+  Creates a new product in the catalog.
+</Card>
+
+<RequestExample>
+```json Request
+{
+  "sku": "BEB-COC-A3F2D1",
+  "name": "Coca-Cola 500ml",
+  "description": "Refreshing cola beverage",
+  "category": "Beverages",
+  "unit_measure": "units",
+  "unit_value": 1.0,
+  "is_perishable": true,
+  "expiration_date": "2026-12-31",
+  "suggested_price": 15.50
+}
+```
+
+```json Response
+{
+  "id": "uuid-here",
+  "sku": "BEB-COC-A3F2D1",
+  "name": "Coca-Cola 500ml",
+  "category": "Beverages",
+  "unit_measure": "units",
+  "suggested_price": 15.50
+}
+```
+</RequestExample>
+
+## Product Categories
+
+Categories help organize products and enable filtering in reports and dashboards. Common categories include:
+
+<CardGroup cols={3}>
+  <Card title="Beverages" icon="glass-water">
+    Drinks, juices, sodas
+  </Card>
+  <Card title="Food" icon="burger">
+    Perishable food items
+  </Card>
+  <Card title="Electronics" icon="laptop">
+    Electronic devices
+  </Card>
+  <Card title="Clothing" icon="shirt">
+    Apparel and textiles
+  </Card>
+  <Card title="Hardware" icon="wrench">
+    Tools and equipment
+  </Card>
+  <Card title="Supplies" icon="box">
+    Office and general supplies
+  </Card>
+</CardGroup>
+
+## Price Management
+
+The system tracks price history to maintain transparency and enable price trend analysis.
+
+### Price History Tracking
+
+<CodeGroup>
+```python backend/Product/Domain/price_history.py
+class PriceHistory(Base, AuditableEntity):
+    __tablename__ = "price_history"
+
+    id = Column(String(50), primary_key=True, index=True)
+    product_id = Column(String(50), ForeignKey("products.id"), nullable=False)
+    old_price = Column(Float, nullable=False)
+    new_price = Column(Float, nullable=False)
+    reason = Column(String(200), nullable=True)
+```
+</CodeGroup>
+
+### Bulk Price Updates
+
+Update multiple product prices simultaneously with automatic history tracking:
+
+<CodeGroup>
+```python backend/Product/Adapters/product_controller.py
+@router.route('/update-prices', methods=['POST'])
+@require_role('admin', 'gestor')
+def update_prices():
+    updates = request.get_json()
+    
+    for update in updates:
+        product = prod_repo.get_by_id(update.get('product_id'))
+        if product and product.suggested_price != update.get('new_price'):
+            history = PriceHistory(
+                id=str(uuid.uuid4()),
+                product_id=product.id,
+                old_price=product.suggested_price,
+                new_price=update.get('new_price'),
+                reason=update.get('reason', "Massive update")
+            )
+            product.suggested_price = update.get('new_price')
+            prod_repo.update(product)
+            hist_repo.create(history)
+            updated_count += 1
+```
+</CodeGroup>
+
+<RequestExample>
+```json Bulk Price Update
+[
+  {
+    "product_id": "uuid-1",
+    "new_price": 18.50,
+    "reason": "Market adjustment"
+  },
+  {
+    "product_id": "uuid-2",
+    "new_price": 25.00,
+    "reason": "Supplier price increase"
+  }
+]
+```
+</RequestExample>
+
+## Perishable Products
+
+Products marked as perishable have special handling for expiration dates:
+
+<Warning>
+  Perishable products should always have expiration dates set on their batches to enable FEFO (First Expired, First Out) inventory management.
+</Warning>
+
+### Expiration Tracking Features
+
+<AccordionGroup>
+  <Accordion title="Batch-Level Expiration Dates">
+    Each batch of a perishable product can have its own expiration date, allowing precise tracking of different purchase lots.
+  </Accordion>
+  
+  <Accordion title="FEFO Algorithm">
+    When selling perishable products, the system automatically uses batches closest to expiration first (see [Batch Tracking](/features/batch-tracking)).
+  </Accordion>
+  
+  <Accordion title="Low Stock Alerts">
+    Dashboard alerts help identify products approaching expiration dates.
+  </Accordion>
+</AccordionGroup>
+
+## Querying Products
+
+Retrieve products with pagination support:
+
+<CodeGroup>
+```python backend/Product/Adapters/product_controller.py
+@router.route('/', methods=['GET'])
+@require_role('admin', 'gestor', 'consultor')
+def get_products():
+    skip = int(request.args.get('skip', 0))
+    limit = int(request.args.get('limit', 100))
+    
+    products = repo.get_all(skip=skip, limit=limit)
+    return jsonify(result), 200
+```
+</CodeGroup>
+
+### Query Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `skip` | Integer | 0 | Number of records to skip |
+| `limit` | Integer | 100 | Maximum records to return |
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Descriptive Names" icon="font">
+    Product names should be clear and include key attributes (e.g., "Coca-Cola 500ml" vs "Coke")
+  </Card>
+  
+  <Card title="Consistent Categories" icon="folder-tree">
+    Maintain a standardized list of categories for better organization and reporting
+  </Card>
+  
+  <Card title="Update Prices Regularly" icon="arrow-trend-up">
+    Keep suggested prices current to ensure accurate profit margin calculations
+  </Card>
+  
+  <Card title="Mark Perishables Correctly" icon="calendar-xmark">
+    Always set `is_perishable` flag for products with expiration dates
+  </Card>
+</CardGroup>
+
+## Related Documentation
+
+<CardGroup cols={3}>
+  <Card title="Batch Tracking" icon="layer-group" href="/features/batch-tracking">
+    Learn about batch-level inventory management
+  </Card>
+  
+  <Card title="Stock Movements" icon="arrows-turn-to-dots" href="/features/stock-movements">
+    Understand inventory transactions
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/products/overview">
+    Complete API documentation
+  </Card>
+</CardGroup>

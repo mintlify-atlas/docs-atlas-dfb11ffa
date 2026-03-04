@@ -1,0 +1,183 @@
+---
+title: Movement Reports
+description: Advanced search and reporting for inventory movements
+---
+
+## Search Movements
+
+<Card title="GET /api/v1/reports/movements/search" icon="magnifying-glass">
+  Advanced search for inventory movements with multiple filter options and pagination support.
+</Card>
+
+### Query Parameters
+
+<ParamField query="start_date" type="string" optional>
+  Start date for the search range in `YYYY-MM-DD` format (e.g., `2026-01-01`)
+</ParamField>
+
+<ParamField query="end_date" type="string" optional>
+  End date for the search range in `YYYY-MM-DD` format (e.g., `2026-03-04`)
+</ParamField>
+
+<ParamField query="product_id" type="string" optional>
+  Filter movements for a specific product ID (UUID format)
+</ParamField>
+
+<ParamField query="movement_type" type="string" optional>
+  Filter by movement type. Available values:
+  - `ENTRY` - Incoming inventory
+  - `EXIT` - Outgoing inventory
+  - `ADJUSTMENT` - Stock adjustments
+</ParamField>
+
+<ParamField query="user_id" type="string" optional>
+  Filter movements by the user who performed them (UUID format)
+</ParamField>
+
+<ParamField query="skip" type="integer" default="0">
+  Number of records to skip for pagination
+</ParamField>
+
+<ParamField query="limit" type="integer" default="100">
+  Maximum number of records to return (max: 100)
+</ParamField>
+
+### Authorization
+
+Requires one of the following roles:
+- `admin`
+- `gestor`
+- `consultor`
+
+### Response
+
+```json
+{
+  "status": "success",
+  "count": 2,
+  "movements": [
+    {
+      "movement_id": "123e4567-e89b-12d3-a456-426614174000",
+      "product_id": "223e4567-e89b-12d3-a456-426614174001",
+      "product_name": "Product A",
+      "product_sku": "SKU-001",
+      "movement_type": "ENTRY",
+      "quantity": 50,
+      "batch_id": "BATCH-001",
+      "unit_cost": 50.00,
+      "total_cost": 2500.00,
+      "timestamp": "2026-03-04T10:30:00Z",
+      "user_id": "323e4567-e89b-12d3-a456-426614174002",
+      "user_name": "John Doe",
+      "notes": "Received from supplier XYZ"
+    },
+    {
+      "movement_id": "133e4567-e89b-12d3-a456-426614174003",
+      "product_id": "223e4567-e89b-12d3-a456-426614174001",
+      "product_name": "Product A",
+      "product_sku": "SKU-001",
+      "movement_type": "EXIT",
+      "quantity": -20,
+      "batch_id": "BATCH-001",
+      "unit_cost": 50.00,
+      "total_cost": -1000.00,
+      "timestamp": "2026-03-04T14:15:00Z",
+      "user_id": "333e4567-e89b-12d3-a456-426614174004",
+      "user_name": "Jane Smith",
+      "notes": "Sale to customer ABC"
+    }
+  ]
+}
+```
+
+### Pagination
+
+Use the `skip` and `limit` parameters to paginate through large result sets:
+
+```bash
+# First page (records 1-100)
+curl -X GET "https://api.example.com/api/v1/reports/movements/search?skip=0&limit=100" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Second page (records 101-200)
+curl -X GET "https://api.example.com/api/v1/reports/movements/search?skip=100&limit=100" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Filter Examples
+
+#### Search by Date Range
+
+```bash
+curl -X GET "https://api.example.com/api/v1/reports/movements/search?start_date=2026-01-01&end_date=2026-03-04" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+#### Search by Product
+
+```bash
+curl -X GET "https://api.example.com/api/v1/reports/movements/search?product_id=223e4567-e89b-12d3-a456-426614174001" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+#### Search by Movement Type
+
+```bash
+curl -X GET "https://api.example.com/api/v1/reports/movements/search?movement_type=ENTRY&start_date=2026-03-01" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+#### Search by User
+
+```bash
+curl -X GET "https://api.example.com/api/v1/reports/movements/search?user_id=323e4567-e89b-12d3-a456-426614174002" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+#### Combined Filters
+
+```bash
+curl -X GET "https://api.example.com/api/v1/reports/movements/search?start_date=2026-01-01&end_date=2026-03-04&movement_type=EXIT&product_id=223e4567-e89b-12d3-a456-426614174001&limit=50" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Error Responses
+
+<ResponseField name="400" type="error">
+  Invalid start_date format
+  ```json
+  {
+    "error": "Invalid start_date format"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="400" type="error">
+  Invalid end_date format
+  ```json
+  {
+    "error": "Invalid end_date format"
+  }
+  ```
+</ResponseField>
+
+### Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Audit Trail" icon="file-lines">
+    Track all movements for a specific product to maintain detailed audit records.
+  </Card>
+  <Card title="User Activity" icon="user">
+    Monitor inventory actions performed by specific users for accountability.
+  </Card>
+  <Card title="Period Analysis" icon="calendar-range">
+    Analyze movement patterns within specific date ranges for reporting.
+  </Card>
+  <Card title="Movement Type Analysis" icon="filter">
+    Filter by movement type to analyze entries, exits, or adjustments separately.
+  </Card>
+</CardGroup>
+
+### Code Reference
+
+Implemented in `backend/Report/Adapters/report_controller.py:250`

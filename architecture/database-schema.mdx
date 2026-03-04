@@ -1,0 +1,808 @@
+---
+title: 'Database Schema'
+description: 'Complete database structure and entity relationships'
+---
+
+## Overview
+
+The Inventory Management System uses **SQLite** (development) with **SQLAlchemy ORM** for database operations. The schema is organized around core business entities with well-defined relationships.
+
+### Database Technology
+
+- **Database**: SQLite (file: `inventory.db`)
+- **ORM**: SQLAlchemy 2.x with declarative base
+- **Migrations**: Manual schema evolution (no Alembic)
+- **Initialization**: Automatic table creation via `Base.metadata.create_all()`
+
+See `backend/Database/config.py:1` for configuration.
+
+## Entity Relationship Diagram
+
+```
+┌─────────────────┐
+│      Role       │
+│─────────────────│
+│ id (PK)         │───┐
+│ name            │   │
+│ description     │   │
+└─────────────────┘   │
+                      │
+                      │ 1:N
+                      │
+┌─────────────────┐   │
+│      User       │   │
+│─────────────────│   │
+│ id (PK)         │   │
+│ username        │   │
+│ email           │   │
+│ password_hash   │   │
+│ active          │   │
+│ role_id (FK)    │───┘
+└─────────────────┘
+
+
+┌──────────────────┐         1:N         ┌──────────────────┐
+│     Supplier     │────────────────────>│     Movement     │
+│──────────────────│                     │──────────────────│
+│ id (PK)          │                     │ id (PK)          │
+│ nombre           │                     │ product_id (FK)  │───┐
+│ tipo_documento   │                     │ supplier_id (FK) │   │
+│ numero_documento │                     │ customer_id (FK) │   │
+│ direccion        │    ┌───────────────>│ type             │   │
+│ telefono         │    │                │ quantity         │   │
+│ email            │    │                │ unit_price       │   │
+│ created_at       │    │                │ total_price      │   │
+│ created_by       │    │                │ total_cost       │   │
+│ updated_at       │    │                │ reference_id     │   │
+│ updated_by       │    │                │ notes            │   │
+└──────────────────┘    │                │ created_at       │   │
+                        │                │ created_by       │   │
+                        │                │ updated_at       │   │
+┌──────────────────┐    │                │ updated_by       │   │
+│     Customer     │    │ 1:N            └──────────────────┘   │
+│──────────────────│    │                                        │
+│ id (PK)          │────┘                                        │
+│ nombre           │                                             │
+│ tipo_documento   │                                             │
+│ numero_documento │                          N:1                │
+│ direccion        │                           │                 │
+│ telefono         │                           │                 │
+│ email            │                           ↓                 │
+│ condicion_pago   │              ┌──────────────────┐           │
+│ created_at       │              │     Product      │<──────────┘
+│ created_by       │              │──────────────────│
+│ updated_at       │              │ id (PK)          │
+│ updated_by       │              │ sku (UNIQUE)     │
+└──────────────────┘              │ name             │
+                                  │ description      │
+                                  │ category         │
+                                  │ unit_measure     │
+                                  │ unit_value       │
+                                  │ is_perishable    │
+                                  │ expiration_date  │
+                                  │ suggested_price  │
+                                  │ created_at       │
+                                  │ created_by       │
+                                  │ updated_at       │
+                                  │ updated_by       │
+                                  └──────────────────┘
+                                           │
+                                           │ 1:N
+                     ┌─────────────────────┼─────────────────────┐
+                     │                     │                     │
+                     ↓                     ↓                     ↓
+        ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+        │      Batch       │  │  Price History   │  │   (Movement)     │
+        │──────────────────│  │──────────────────│  │   (shown above)  │
+        │ id (PK)          │  │ id (PK)          │  └──────────────────┘
+        │ product_id (FK)  │  │ product_id (FK)  │
+        │ initial_quantity │  │ old_price        │
+        │ available_qty    │  │ new_price        │
+        │ unit_cost        │  │ reason           │
+        │ purchase_date    │  │ created_at       │
+        │ expiration_date  │  │ created_by       │
+        │ supplier_id      │  │ updated_at       │
+        │ entry_txn_ref    │  │ updated_by       │
+        │ created_at       │  └──────────────────┘
+        │ created_by       │
+        │ updated_at       │
+        │ updated_by       │
+        └──────────────────┘
+
+
+┌──────────────────┐
+│    AuditLog      │
+│──────────────────│
+│ id (PK)          │
+│ user_id          │
+│ user_name        │
+│ action           │
+│ table_name       │
+│ record_id        │
+│ old_values       │
+│ new_values       │
+│ description      │
+│ ip_address       │
+│ timestamp        │
+│ created_at       │
+│ created_by       │
+│ updated_at       │
+│ updated_by       │
+└──────────────────┘
+```
+
+## Core Entities
+
+### 1. Product
+
+Central entity representing inventory items.
+
+**Table**: `products`
+
+**Location**: `backend/Product/Domain/product.py:6`
+
+```python
+class Product(Base, AuditableEntity):
+    __tablename__ = "products"
+
+    id = Column(String(50), primary_key=True, index=True)
+    sku = Column(String(100), unique=True, index=True, nullable=False)
+    name = Column(String(200), index=True, nullable=False)
+    description = Column(String(500), nullable=True)
+    category = Column(String(100), index=True, nullable=False)
+    unit_measure = Column(String(50), nullable=False)  # e.g., "kg", "units", "liters"
+    unit_value = Column(Float, default=1.0, nullable=False)
+    is_perishable = Column(Boolean, default=False, nullable=False)
+    expiration_date = Column(String(50), nullable=True)
+    suggested_price = Column(Float, nullable=False)
+
+    # Relationships
+    batches = relationship("Batch", back_populates="product", cascade="all, delete-orphan")
+    movements = relationship("Movement", back_populates="product", cascade="all, delete-orphan")
+    price_history = relationship("PriceHistory", back_populates="product", cascade="all, delete-orphan")
+```
+
+**Fields**:
+- `id`: UUID primary key
+- `sku`: Stock Keeping Unit (unique identifier)
+- `name`: Product name
+- `description`: Detailed description (optional)
+- `category`: Product category for grouping
+- `unit_measure`: Measurement unit (kg, liters, units, etc.)
+- `unit_value`: Base value for measurement
+- `is_perishable`: Whether product has expiration
+- `expiration_date`: Expected expiration (if perishable)
+- `suggested_price`: Recommended selling price
+- `created_at`, `created_by`, `updated_at`, `updated_by`: Audit fields (from `AuditableEntity`)
+
+**Indexes**:
+- Primary key on `id`
+- Unique index on `sku`
+- Index on `name` (for search)
+- Index on `category` (for filtering)
+
+**Relationships**:
+- One-to-many with `Batch` (product can have multiple batches)
+- One-to-many with `Movement` (product has movement history)
+- One-to-many with `PriceHistory` (tracks price changes)
+
+### 2. Batch
+
+Represents a specific lot/batch of products received.
+
+**Table**: `batches`
+
+**Location**: `backend/Product/Domain/batch.py:6`
+
+```python
+class Batch(Base, AuditableEntity):
+    __tablename__ = "batches"
+
+    id = Column(String(50), primary_key=True, index=True)
+    product_id = Column(String(50), ForeignKey("products.id"), nullable=False)
+    initial_quantity = Column(Integer, nullable=False)
+    available_quantity = Column(Integer, nullable=False)
+    unit_cost = Column(Float, nullable=False)
+    purchase_date = Column(DateTime, nullable=False)
+    expiration_date = Column(DateTime, nullable=True)
+    supplier_id = Column(String(50), nullable=True)
+    entry_transaction_ref = Column(String(100), nullable=True)
+
+    # Relationships
+    product = relationship("Product", back_populates="batches")
+```
+
+**Fields**:
+- `id`: UUID primary key
+- `product_id`: Foreign key to `products.id`
+- `initial_quantity`: Original quantity received
+- `available_quantity`: Current available quantity (decreases with sales)
+- `unit_cost`: Cost per unit at purchase time (for FIFO costing)
+- `purchase_date`: When batch was received
+- `expiration_date`: Batch-specific expiration (if applicable)
+- `supplier_id`: Reference to supplier (optional)
+- `entry_transaction_ref`: Reference to entry movement
+
+**Business Logic**:
+- Used for **FIFO (First-In-First-Out)** inventory costing
+- `available_quantity` is updated when products are sold
+- Oldest batches are depleted first
+
+### 3. Movement
+
+Tracks all inventory movements (entries, exits, adjustments).
+
+**Table**: `movements`
+
+**Location**: `backend/Product/Domain/movement.py:12`
+
+```python
+class MovementType(str, enum.Enum):
+    ENTRY = "ENTRY"           # Purchase/Stock in
+    EXIT = "EXIT"             # Sale/Stock out
+    ADJUSTMENT = "ADJUSTMENT" # Inventory correction
+
+class Movement(Base, AuditableEntity):
+    __tablename__ = "movements"
+
+    id = Column(String(50), primary_key=True, index=True)
+    product_id = Column(String(50), ForeignKey("products.id"), nullable=False)
+    supplier_id = Column(String(50), ForeignKey("suppliers.id"), nullable=True)
+    customer_id = Column(String(50), ForeignKey("customers.id"), nullable=True)
+    type = Column(String(50), nullable=False)  # MovementType value
+    quantity = Column(Integer, nullable=False)
+    unit_price = Column(Float, nullable=True)     # Price for this transaction
+    total_price = Column(Float, nullable=True)    # quantity * unit_price
+    total_cost = Column(Float, nullable=True)     # FIFO calculated cost (for EXIT)
+    reference_id = Column(String(50), nullable=True)
+    notes = Column(String(500), nullable=True)
+
+    # Relationships
+    product = relationship("Product", back_populates="movements")
+    supplier = relationship("Supplier", back_populates="movements")
+    customer = relationship("Customer", back_populates="movements")
+```
+
+**Fields**:
+- `id`: UUID primary key
+- `product_id`: Foreign key to product
+- `supplier_id`: Foreign key to supplier (for ENTRY movements)
+- `customer_id`: Foreign key to customer (for EXIT movements)
+- `type`: Movement type (ENTRY, EXIT, ADJUSTMENT)
+- `quantity`: Number of units moved (positive or negative)
+- `unit_price`: Price per unit in this transaction
+- `total_price`: Total transaction value (quantity × unit_price)
+- `total_cost`: FIFO-calculated cost (important for profit calculation)
+- `reference_id`: Link to external document (order, invoice)
+- `notes`: Additional information
+
+**Movement Types**:
+1. **ENTRY**: Stock received (purchase, production, return)
+   - Creates or updates batches
+   - Links to supplier
+2. **EXIT**: Stock sold or consumed
+   - Depletes batches using FIFO
+   - Links to customer
+   - Calculates `total_cost` from batch costs
+3. **ADJUSTMENT**: Manual correction (damage, loss, count adjustment)
+   - Can be positive or negative
+   - Used for inventory reconciliation
+
+### 4. Supplier
+
+Represents vendors/suppliers of products.
+
+**Table**: `suppliers`
+
+**Location**: `backend/Stakeholder/Domain/supplier.py:7`
+
+```python
+class Supplier(Base, AuditableEntity):
+    __tablename__ = "suppliers"
+
+    id = Column(String(50), primary_key=True, index=True)
+    nombre = Column(String(200), nullable=False, index=True)
+    tipo_documento = Column(String(10), nullable=False, default="RUC")
+    numero_documento = Column(String(50), unique=True, nullable=False, index=True)
+    direccion = Column(String(300), nullable=True)
+    telefono = Column(String(30), nullable=True)
+    email = Column(String(150), unique=True, nullable=True)
+    plazo_entrega_dias = Column(Integer, nullable=True)
+    condiciones_compra = Column(Text, nullable=True)
+
+    # Relationships
+    movements = relationship("Movement", back_populates="supplier", 
+                           foreign_keys="Movement.supplier_id")
+```
+
+**Fields**:
+- `id`: UUID primary key
+- `nombre`: Supplier name
+- `tipo_documento`: Document type (RUC, DNI, etc.)
+- `numero_documento`: Document number (unique identifier)
+- `direccion`: Address
+- `telefono`: Phone number
+- `email`: Email (unique)
+- `plazo_entrega_dias`: Delivery time in days
+- `condiciones_compra`: Purchase terms and conditions
+
+### 5. Customer
+
+Represents buyers/customers.
+
+**Table**: `customers`
+
+**Location**: `backend/Stakeholder/Domain/customer.py:19`
+
+```python
+class DocumentType(str, enum.Enum):
+    RUC = "RUC"   # Tax ID (businesses)
+    DNI = "DNI"   # National ID (individuals)
+    OTRO = "OTRO" # Other
+
+class PaymentCondition(str, enum.Enum):
+    CONTADO = "CONTADO"  # Cash payment
+    CREDITO = "CREDITO"  # Credit payment
+
+class Customer(Base, AuditableEntity):
+    __tablename__ = "customers"
+
+    id = Column(String(50), primary_key=True, index=True)
+    nombre = Column(String(200), nullable=False, index=True)
+    tipo_documento = Column(String(10), nullable=False, default=DocumentType.DNI)
+    numero_documento = Column(String(50), unique=True, nullable=False, index=True)
+    direccion = Column(String(300), nullable=True)
+    telefono = Column(String(30), nullable=True)
+    email = Column(String(150), unique=True, nullable=True)
+    condicion_pago = Column(String(20), nullable=False, default=PaymentCondition.CONTADO)
+
+    # Relationships
+    movements = relationship("Movement", back_populates="customer", 
+                           foreign_keys="Movement.customer_id")
+```
+
+**Fields**:
+- `id`: UUID primary key
+- `nombre`: Customer name
+- `tipo_documento`: Document type (RUC, DNI, OTRO)
+- `numero_documento`: Document number (unique)
+- `direccion`: Address
+- `telefono`: Phone number
+- `email`: Email (unique)
+- `condicion_pago`: Payment condition (cash or credit)
+
+### 6. User
+
+System users with authentication.
+
+**Table**: `users`
+
+**Location**: `backend/User/Domain/user.py:6`
+
+```python
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(String(50), primary_key=True, index=True)
+    username = Column(String(100), unique=True, nullable=False, index=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    active = Column(Boolean, default=True, nullable=False)
+    role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
+
+    # Relationships
+    role = relationship("Role", lazy="joined")
+```
+
+**Fields**:
+- `id`: UUID primary key
+- `username`: Unique username
+- `email`: Unique email address
+- `password_hash`: Hashed password (never plain text)
+- `active`: Account status (can be deactivated)
+- `role_id`: Foreign key to role
+
+**Security**:
+- Passwords are hashed using Werkzeug security helpers
+- Never stores plain text passwords
+- Email can be used for password reset
+
+### 7. Role
+
+User roles for authorization.
+
+**Table**: `roles`
+
+**Location**: `backend/User/Domain/role.py:5`
+
+```python
+class Role(Base):
+    __tablename__ = "roles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    name = Column(String(50), unique=True, nullable=False, index=True)
+    description = Column(String(255), nullable=True)
+```
+
+**Fields**:
+- `id`: Auto-increment integer primary key
+- `name`: Role name (unique)
+- `description`: Role description
+
+**Default Roles**:
+1. **admin**: Full system access
+2. **gestor**: Manager (can create/edit, not delete)
+3. **consultor**: Read-only access
+
+See `backend/User/Domain/user_service.py` for role seeding logic.
+
+### 8. PriceHistory
+
+Tracks product price changes over time.
+
+**Table**: `price_history`
+
+**Location**: `backend/Product/Domain/price_history.py`
+
+```python
+class PriceHistory(Base, AuditableEntity):
+    __tablename__ = "price_history"
+
+    id = Column(String(50), primary_key=True, index=True)
+    product_id = Column(String(50), ForeignKey("products.id"), nullable=False)
+    old_price = Column(Float, nullable=False)
+    new_price = Column(Float, nullable=False)
+    reason = Column(String(500), nullable=True)
+
+    # Relationships
+    product = relationship("Product", back_populates="price_history")
+```
+
+**Fields**:
+- `id`: UUID primary key
+- `product_id`: Foreign key to product
+- `old_price`: Previous price
+- `new_price`: New price
+- `reason`: Reason for price change
+- `created_at`: When price was changed (from `AuditableEntity`)
+
+### 9. AuditLog
+
+Complete audit trail of all system operations.
+
+**Table**: `audit_logs`
+
+**Location**: `backend/Audit/Domain/audit_log.py:7`
+
+```python
+class AuditLog(Base, AuditableEntity):
+    __tablename__ = "audit_logs"
+    
+    id = Column(String(50), primary_key=True, index=True)
+    user_id = Column(String(50), nullable=False, index=True)
+    user_name = Column(String(200), nullable=True)
+    action = Column(String(100), nullable=False)  # CREATE, UPDATE, DELETE, READ
+    table_name = Column(String(100), nullable=False, index=True)
+    record_id = Column(String(50), nullable=False, index=True)
+    old_values = Column(Text, nullable=True)      # JSON string
+    new_values = Column(Text, nullable=True)      # JSON string
+    description = Column(Text, nullable=True)
+    ip_address = Column(String(50), nullable=True)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), 
+                      nullable=False, index=True)
+```
+
+**Fields**:
+- `id`: UUID primary key
+- `user_id`: Who performed the action
+- `user_name`: Username (denormalized for reporting)
+- `action`: Type of action (CREATE, UPDATE, DELETE, READ)
+- `table_name`: Which table was affected
+- `record_id`: ID of the affected record
+- `old_values`: JSON snapshot before change
+- `new_values`: JSON snapshot after change
+- `description`: Human-readable description
+- `ip_address`: User's IP address
+- `timestamp`: When action occurred
+
+**Indexes**:
+- Index on `user_id` (find all actions by user)
+- Index on `table_name` (find all actions on a table)
+- Index on `record_id` (find all actions on a record)
+- Index on `timestamp` (time-based queries)
+
+## Auditable Entity Mixin
+
+All domain entities (except `User` and `Role`) inherit from `AuditableEntity`.
+
+**Location**: `backend/CommonLayer/domain/autitable_entity.py:5`
+
+```python
+class AuditableEntity:
+    """Base mixin providing audit fields for all domain entities."""
+    
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_by = Column(String(50), nullable=True)
+    updated_at = Column(DateTime, 
+                       default=lambda: datetime.now(timezone.utc),
+                       onupdate=lambda: datetime.now(timezone.utc),
+                       nullable=False)
+    updated_by = Column(String(50), nullable=True)
+
+    def to_audit_dict(self) -> dict:
+        return {
+            "entity_id": self.id,
+            "entity_type": self.__class__.__name__,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "created_by": self.created_by,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "updated_by": self.updated_by,
+        }
+```
+
+**Automatic Fields**:
+- `created_at`: Set once on INSERT (UTC timestamp)
+- `created_by`: User ID who created the record
+- `updated_at`: Auto-updated on every UPDATE
+- `updated_by`: User ID who last modified the record
+
+## Relationships Summary
+
+### One-to-Many Relationships
+
+| Parent | Child | Cascade | Description |
+|--------|-------|---------|-------------|
+| Product | Batch | delete-orphan | Deleting product removes all batches |
+| Product | Movement | delete-orphan | Deleting product removes history |
+| Product | PriceHistory | delete-orphan | Deleting product removes price history |
+| Supplier | Movement | none | Supplier can have many purchases |
+| Customer | Movement | none | Customer can have many sales |
+| Role | User | none | One role, many users |
+
+### Foreign Key Constraints
+
+All foreign keys are enforced at the database level:
+
+```python
+# Example: Movement references Product
+product_id = Column(String(50), ForeignKey("products.id"), nullable=False)
+
+# Example: User references Role
+role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
+```
+
+## Indexes
+
+Strategic indexes for query performance:
+
+### Primary Keys
+All tables have indexed primary keys (automatic).
+
+### Unique Indexes
+- `products.sku`: Prevent duplicate SKUs
+- `suppliers.numero_documento`: Unique supplier identification
+- `customers.numero_documento`: Unique customer identification
+- `users.username`: Unique usernames
+- `users.email`: Unique email addresses
+- `roles.name`: Unique role names
+
+### Lookup Indexes
+- `products.name`: Fast product search
+- `products.category`: Category filtering
+- `suppliers.nombre`: Supplier search
+- `customers.nombre`: Customer search
+- `audit_logs.user_id`: Find actions by user
+- `audit_logs.table_name`: Find actions on table
+- `audit_logs.record_id`: Find actions on record
+- `audit_logs.timestamp`: Time-based queries
+
+## Database Configuration
+
+**Location**: `backend/Database/config.py:1`
+
+```python
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base, scoped_session
+from sqlalchemy.pool import StaticPool
+
+SQLALCHEMY_DATABASE_URL = "sqlite:///./inventory.db"
+
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL, 
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+    pool_pre_ping=True,
+    echo=False  # Set to True to log SQL queries
+)
+
+session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = scoped_session(session_factory)
+
+Base = declarative_base()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+```
+
+**Configuration**:
+- **StaticPool**: Keeps single connection for SQLite
+- **check_same_thread**: Disabled for multi-threaded Flask
+- **pool_pre_ping**: Tests connections before use
+- **Scoped Sessions**: Thread-safe session management
+
+## Initialization
+
+Tables are created automatically on application startup:
+
+**Location**: `backend/main.py:27`
+
+```python
+from Database.config import engine, Base
+
+# Import all models so they're registered with Base
+from Product.Domain.product import Product
+from Product.Domain.batch import Batch
+from Product.Domain.movement import Movement
+from Stakeholder.Domain.customer import Customer
+from Stakeholder.Domain.supplier import Supplier
+from User.Domain.user import User
+from User.Domain.role import Role
+from Audit.Domain.audit_log import AuditLog
+
+# Create all tables
+Base.metadata.create_all(bind=engine)
+```
+
+## Data Types
+
+### SQLAlchemy to SQLite Mapping
+
+| SQLAlchemy Type | SQLite Type | Example Usage |
+|-----------------|-------------|---------------|
+| `String(N)` | TEXT | Names, SKUs, emails |
+| `Text` | TEXT | Long descriptions |
+| `Integer` | INTEGER | Quantities, IDs |
+| `Float` | REAL | Prices, costs |
+| `Boolean` | INTEGER (0/1) | Flags (active, perishable) |
+| `DateTime` | TEXT (ISO 8601) | Timestamps |
+| `Enum` | TEXT | Movement types |
+
+### Common Patterns
+
+**UUIDs as Primary Keys**:
+```python
+import uuid
+
+id = Column(String(50), primary_key=True, index=True)
+# Set value: str(uuid.uuid4())
+```
+
+**Timestamps**:
+```python
+from datetime import datetime, timezone
+
+created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+```
+
+**Enums**:
+```python
+import enum
+from sqlalchemy import Enum
+
+class MovementType(str, enum.Enum):
+    ENTRY = "ENTRY"
+    EXIT = "EXIT"
+
+type = Column(String(50), nullable=False)  # Stores string value
+```
+
+## Migration Strategy
+
+### Current Approach
+Manual schema evolution:
+1. Modify domain model classes
+2. Delete `inventory.db` (development only)
+3. Restart application
+4. Tables recreated automatically
+
+### Production Recommendation
+For production, implement proper migrations:
+1. **Alembic**: SQLAlchemy migration tool
+2. **Version control**: Track schema changes
+3. **Rollback support**: Safe schema evolution
+
+```bash
+# Future implementation
+alembic init alembic
+alembic revision --autogenerate -m "Add price_history table"
+alembic upgrade head
+```
+
+## Query Examples
+
+### Get Product with Relationships
+```python
+from sqlalchemy.orm import joinedload
+
+product = db.query(Product)\
+    .options(
+        joinedload(Product.batches),
+        joinedload(Product.movements)
+    )\
+    .filter(Product.id == product_id)\
+    .first()
+```
+
+### Calculate Total Stock
+```python
+from sqlalchemy import func
+
+total_stock = db.query(func.sum(Batch.available_quantity))\
+    .filter(Batch.product_id == product_id)\
+    .scalar()
+```
+
+### Movement History with Stakeholders
+```python
+movements = db.query(Movement)\
+    .join(Product)\
+    .outerjoin(Supplier)\
+    .outerjoin(Customer)\
+    .filter(Product.id == product_id)\
+    .order_by(Movement.created_at.desc())\
+    .all()
+```
+
+### Audit Trail for Record
+```python
+audit_trail = db.query(AuditLog)\
+    .filter(
+        AuditLog.table_name == "products",
+        AuditLog.record_id == product_id
+    )\
+    .order_by(AuditLog.timestamp.desc())\
+    .all()
+```
+
+## Performance Considerations
+
+### Indexes
+- All foreign keys are indexed automatically
+- Add indexes on frequently queried fields (name, SKU, category)
+- Composite indexes for common filter combinations
+
+### Eager Loading
+Use `joinedload` to avoid N+1 query problems:
+```python
+products = db.query(Product)\
+    .options(joinedload(Product.batches))\
+    .all()  # Single query instead of N+1
+```
+
+### Connection Pooling
+SQLite uses `StaticPool` (single connection). For PostgreSQL/MySQL in production, configure proper pool size:
+```python
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=10,
+    max_overflow=20
+)
+```
+
+## Security Considerations
+
+1. **SQL Injection Protection**: SQLAlchemy parameterizes all queries automatically
+2. **Password Storage**: Never store plain text passwords (use `password_hash`)
+3. **Audit Trail**: All changes tracked with user ID and timestamp
+4. **Soft Deletes**: Consider adding `deleted_at` column instead of hard deletes
+5. **Data Validation**: Validate at application layer before database insertion
+
+## Related Documentation
+
+- [Architecture Overview](/architecture/overview) - Full system architecture
+- [Hexagonal Design](/architecture/hexagonal-design) - How domain models fit into the architecture
+- [API Reference](/api-reference) - HTTP endpoints that interact with these entities

@@ -1,0 +1,529 @@
+---
+title: 'Stakeholder Management'
+description: 'Manage customers and suppliers with document tracking, contact information, and payment conditions'
+icon: 'users'
+---
+
+## Overview
+
+The Stakeholder Management system handles both customers and suppliers, providing a unified interface for managing business relationships, contact information, and transaction preferences.
+
+<Info>
+  Stakeholders are linked to inventory movements, enabling traceability for purchases (suppliers) and sales (customers).
+</Info>
+
+## Stakeholder Types
+
+<CardGroup cols={2}>
+  <Card title="Customers" icon="user-tag" color="#3b82f6">
+    Individuals or businesses who purchase your products
+  </Card>
+  
+  <Card title="Suppliers" icon="truck" color="#10b981">
+    Vendors who provide inventory to your business
+  </Card>
+</CardGroup>
+
+## Customer Management
+
+Customers represent the buyers in your sales transactions.
+
+### Customer Data Model
+
+<CodeGroup>
+```python backend/Stakeholder/Domain/customer.py
+class DocumentType(str, enum.Enum):
+    RUC = "RUC"  # Tax ID
+    DNI = "DNI"  # National ID
+    OTRO = "OTRO"  # Other
+
+class PaymentCondition(str, enum.Enum):
+    CONTADO = "CONTADO"  # Cash
+    CREDITO = "CREDITO"  # Credit
+
+class Customer(Base, AuditableEntity):
+    __tablename__ = "customers"
+
+    id = Column(String(50), primary_key=True, index=True)
+    nombre = Column(String(200), nullable=False, index=True)
+    tipo_documento = Column(String(10), nullable=False, default=DocumentType.DNI)
+    numero_documento = Column(String(50), unique=True, nullable=False, index=True)
+    direccion = Column(String(300), nullable=True)
+    telefono = Column(String(30), nullable=True)
+    email = Column(String(150), unique=True, nullable=True)
+    condicion_pago = Column(String(20), nullable=False, default=PaymentCondition.CONTADO)
+
+    movements = relationship("Movement", back_populates="customer")
+```
+</CodeGroup>
+
+### Customer Attributes
+
+<ParamField path="nombre" type="string" required>
+  Customer name or business name
+</ParamField>
+
+<ParamField path="tipo_documento" type="enum" required>
+  Document type: `RUC`, `DNI`, or `OTRO`
+</ParamField>
+
+<ParamField path="numero_documento" type="string" required>
+  Unique document number (tax ID or national ID)
+</ParamField>
+
+<ParamField path="direccion" type="string">
+  Customer address
+</ParamField>
+
+<ParamField path="telefono" type="string">
+  Contact phone number
+</ParamField>
+
+<ParamField path="email" type="string">
+  Email address (must be unique)
+</ParamField>
+
+<ParamField path="condicion_pago" type="enum" required>
+  Payment terms: `CONTADO` (cash) or `CREDITO` (credit)
+</ParamField>
+
+### Document Types
+
+<AccordionGroup>
+  <Accordion title="RUC - Tax ID" icon="building">
+    For businesses and registered companies. Used for tax reporting and invoicing.
+  </Accordion>
+  
+  <Accordion title="DNI - National ID" icon="id-card">
+    For individual customers using their national identification number.
+  </Accordion>
+  
+  <Accordion title="OTRO - Other" icon="file">
+    For alternative document types like passports or foreign IDs.
+  </Accordion>
+</AccordionGroup>
+
+### Payment Conditions
+
+<CardGroup cols={2}>
+  <Card title="CONTADO (Cash)" icon="money-bill" color="#10b981">
+    Payment required at time of sale
+  </Card>
+  
+  <Card title="CREDITO (Credit)" icon="credit-card" color="#f59e0b">
+    Payment terms extended to customer
+  </Card>
+</CardGroup>
+
+### Customer UI Example
+
+<CodeGroup>
+```jsx frontend/src/Stakeholder/UI/pages/CustomersPage.jsx
+export const CustomersPage = () => {
+    const { customers, fetchCustomers, createCustomer, updateCustomer, deleteCustomer } = useCustomerActions();
+    const [searchQuery, setSearchQuery] = useState('');
+
+    const handleSearch = (e) => {
+        e.preventDefault();
+        fetchCustomers(searchQuery);
+    };
+
+    return (
+        <div>
+            <h1>Gestión de <span className="text-blue-400">Clientes</span></h1>
+            
+            <form onSubmit={handleSearch}>
+                <input
+                    type="text"
+                    placeholder="Buscar por nombre o documento..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                <button type="submit">Buscar</button>
+            </form>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Nombre / Razón Social</th>
+                        <th>Documento</th>
+                        <th>Contacto</th>
+                        <th>Condición Pago</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {customers.map(c => (
+                        <tr key={c.id}>
+                            <td>{c.nombre}</td>
+                            <td>{c.tipo_documento} {c.numero_documento}</td>
+                            <td>
+                                {c.email && <div>{c.email}</div>}
+                                {c.telefono && <div>{c.telefono}</div>}
+                            </td>
+                            <td>
+                                <span className={c.condicion_pago === 'CONTADO' 
+                                    ? 'badge-green' : 'badge-orange'}>
+                                    {c.condicion_pago}
+                                </span>
+                            </td>
+                            <td>
+                                <button onClick={() => handleOpenForm(c)}>Edit</button>
+                                <button onClick={() => handleDelete(c.id)}>Delete</button>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+};
+```
+</CodeGroup>
+
+## Supplier Management
+
+Suppliers are vendors who provide inventory to your business.
+
+### Supplier Data Model
+
+<CodeGroup>
+```python backend/Stakeholder/Domain/supplier.py
+class Supplier(Base, AuditableEntity):
+    __tablename__ = "suppliers"
+
+    id = Column(String(50), primary_key=True, index=True)
+    nombre = Column(String(200), nullable=False, index=True)
+    tipo_documento = Column(String(10), nullable=False, default="RUC")
+    numero_documento = Column(String(50), unique=True, nullable=False, index=True)
+    direccion = Column(String(300), nullable=True)
+    telefono = Column(String(30), nullable=True)
+    email = Column(String(150), unique=True, nullable=True)
+    plazo_entrega_dias = Column(Integer, nullable=True)
+    condiciones_compra = Column(Text, nullable=True)
+
+    movements = relationship("Movement", back_populates="supplier")
+```
+</CodeGroup>
+
+### Supplier Attributes
+
+<ParamField path="nombre" type="string" required>
+  Supplier business name
+</ParamField>
+
+<ParamField path="tipo_documento" type="string" required>
+  Document type (typically "RUC" for businesses)
+</ParamField>
+
+<ParamField path="numero_documento" type="string" required>
+  Unique tax identification number
+</ParamField>
+
+<ParamField path="plazo_entrega_dias" type="integer">
+  Standard delivery time in days
+</ParamField>
+
+<ParamField path="condiciones_compra" type="text">
+  Purchase terms and conditions (payment terms, minimum order quantities, etc.)
+</ParamField>
+
+### Supplier-Specific Fields
+
+<AccordionGroup>
+  <Accordion title="Delivery Time (plazo_entrega_dias)" icon="calendar-days">
+    Track typical lead times for each supplier to better manage reordering schedules.
+    
+    **Example:** If Supplier A has a 7-day lead time, you can set reorder points accordingly.
+  </Accordion>
+  
+  <Accordion title="Purchase Conditions (condiciones_compra)" icon="file-contract">
+    Store important purchasing terms such as:
+    - Minimum order quantities
+    - Payment terms (e.g., "Net 30")
+    - Bulk discount structures
+    - Return policies
+  </Accordion>
+</AccordionGroup>
+
+## Unified Search
+
+Search across both customers and suppliers simultaneously:
+
+<CodeGroup>
+```python backend/Stakeholder/Adapters/stakeholder_controller.py
+@router.route('/search', methods=['GET'])
+@require_role('admin', 'gestor', 'consultor')
+def search_stakeholders():
+    query = request.args.get('q', '').strip()
+    stakeholder_type = request.args.get('type', 'all').lower()
+    limit = int(request.args.get('limit', 10))
+    
+    service = StakeholderService(db)
+    results = service.search_all_stakeholders(
+        query=query, 
+        limit=limit, 
+        stakeholder_type=stakeholder_type
+    )
+    return jsonify(results), 200
+```
+</CodeGroup>
+
+### Search Parameters
+
+<ParamField query="q" type="string">
+  Search query (searches name and document number)
+</ParamField>
+
+<ParamField query="type" type="enum" default="all">
+  Filter by type: `all`, `customer`, or `supplier`
+</ParamField>
+
+<ParamField query="limit" type="integer" default="10">
+  Maximum number of results to return
+</ParamField>
+
+### Search Bar Component
+
+<CodeGroup>
+```jsx frontend/src/Stakeholder/UI/components/StakeholderSearchBar.jsx
+<StakeholderSearchBar
+    type="supplier"
+    placeholder="Buscar proveedor..."
+    onSelect={(id) => setFormData({ ...formData, supplier_id: id || '' })}
+/>
+```
+</CodeGroup>
+
+<Note>
+  The search bar provides autocomplete functionality, making it easy to link stakeholders to transactions.
+</Note>
+
+## Integration with Movements
+
+Stakeholders are automatically linked to inventory movements:
+
+### Entry Movements (Suppliers)
+
+<CodeGroup>
+```python backend/Product/Adapters/batch_controller.py
+batch, mov = stock_svc.register_entry(
+    product_id=data.get('product_id'),
+    quantity=int(data.get('quantity')),
+    unit_cost=float(data.get('unit_cost')),
+    supplier_id=data.get('supplier_id'),  # Link to supplier
+    expiration_date=expiration_date
+)
+```
+</CodeGroup>
+
+### Exit Movements (Customers)
+
+While the current implementation focuses on batch-level tracking, customer IDs can be associated with sales movements for CRM purposes.
+
+## CRUD Operations
+
+### Creating a Customer
+
+<Card title="Create Customer" icon="plus" href="/api/stakeholders/customers">
+  **POST** `/api/v1/customers/`
+  
+  Creates a new customer record.
+</Card>
+
+<RequestExample>
+```json Request
+{
+  "nombre": "Distribuidora ABC S.A.",
+  "tipo_documento": "RUC",
+  "numero_documento": "20123456789",
+  "direccion": "Av. Principal 123, Lima",
+  "telefono": "+51 1 234 5678",
+  "email": "ventas@abc.com",
+  "condicion_pago": "CREDITO"
+}
+```
+
+```json Response
+{
+  "id": "uuid-here",
+  "nombre": "Distribuidora ABC S.A.",
+  "tipo_documento": "RUC",
+  "numero_documento": "20123456789",
+  "condicion_pago": "CREDITO"
+}
+```
+</RequestExample>
+
+### Creating a Supplier
+
+<Card title="Create Supplier" icon="plus" href="/api/stakeholders/suppliers">
+  **POST** `/api/v1/suppliers/`
+  
+  Creates a new supplier record.
+</Card>
+
+<RequestExample>
+```json Request
+{
+  "nombre": "Importadora XYZ S.R.L.",
+  "tipo_documento": "RUC",
+  "numero_documento": "20987654321",
+  "direccion": "Jr. Comercio 456, Callao",
+  "telefono": "+51 1 987 6543",
+  "email": "compras@xyz.com",
+  "plazo_entrega_dias": 7,
+  "condiciones_compra": "Net 30, MOQ: 100 units"
+}
+```
+
+```json Response
+{
+  "id": "uuid-here",
+  "nombre": "Importadora XYZ S.R.L.",
+  "numero_documento": "20987654321",
+  "plazo_entrega_dias": 7
+}
+```
+</RequestExample>
+
+## Validation Rules
+
+<Warning>
+  Document numbers (`numero_documento`) must be unique across all customers and suppliers of the same type.
+</Warning>
+
+<CardGroup cols={2}>
+  <Card title="Required Fields" icon="asterisk">
+    - `nombre` (name)
+    - `tipo_documento` (document type)
+    - `numero_documento` (document number)
+    - `condicion_pago` (customers only)
+  </Card>
+  
+  <Card title="Unique Constraints" icon="key">
+    - `numero_documento` must be unique
+    - `email` must be unique (if provided)
+  </Card>
+</CardGroup>
+
+## Role-Based Access
+
+Stakeholder management respects user roles:
+
+<AccordionGroup>
+  <Accordion title="Admin" icon="user-shield">
+    Full CRUD access for both customers and suppliers
+  </Accordion>
+  
+  <Accordion title="Gestor (Manager)" icon="user-tie">
+    Full CRUD access for both customers and suppliers
+  </Accordion>
+  
+  <Accordion title="Consultor (Viewer)" icon="user">
+    Read-only access, can search and view but cannot create/edit/delete
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Complete Profiles" icon="address-card">
+    Fill in all contact information for better communication and record-keeping
+  </Card>
+  
+  <Card title="Verify Documents" icon="circle-check">
+    Ensure document numbers are accurate for tax compliance and invoicing
+  </Card>
+  
+  <Card title="Set Payment Terms" icon="file-contract">
+    Clearly define payment conditions to avoid confusion
+  </Card>
+  
+  <Card title="Track Supplier Terms" icon="clock">
+    Record delivery times and purchase conditions for better inventory planning
+  </Card>
+</CardGroup>
+
+## Traceability Benefits
+
+Linking stakeholders to movements enables:
+
+<Steps>
+  <Step title="Supplier Performance Analysis">
+    Track which suppliers provide the best quality, pricing, and delivery times
+  </Step>
+  
+  <Step title="Customer Purchase History">
+    View complete purchase history for each customer
+  </Step>
+  
+  <Step title="Batch Recall Management">
+    Quickly identify all customers who received products from a specific supplier batch
+  </Step>
+  
+  <Step title="Financial Reporting">
+    Generate supplier and customer reports for accounts payable/receivable
+  </Step>
+</Steps>
+
+## Stakeholder Form
+
+The unified form component handles both customers and suppliers:
+
+<CodeGroup>
+```jsx frontend/src/Stakeholder/UI/components/StakeholderForm.jsx
+<StakeholderForm
+    type="customer"  // or "supplier"
+    initialData={editingCustomer}
+    onSave={handleSave}
+    onCancel={handleCloseForm}
+    loading={loading}
+/>
+```
+</CodeGroup>
+
+<Tip>
+  The form automatically adjusts fields based on stakeholder type, showing payment conditions for customers and delivery terms for suppliers.
+</Tip>
+
+## Search and Filter
+
+The customer and supplier pages include search functionality:
+
+<CodeGroup>
+```jsx Search Implementation
+const [searchQuery, setSearchQuery] = useState('');
+
+const handleSearch = (e) => {
+    e.preventDefault();
+    fetchCustomers(searchQuery);  // or fetchSuppliers(searchQuery)
+};
+
+<form onSubmit={handleSearch}>
+    <input
+        type="text"
+        placeholder="Buscar por nombre o documento..."
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+    />
+    <button type="submit">Buscar</button>
+</form>
+```
+</CodeGroup>
+
+## Related Documentation
+
+<CardGroup cols={3}>
+  <Card title="Stock Movements" icon="arrows-turn-to-dots" href="/features/stock-movements">
+    Link stakeholders to transactions
+  </Card>
+  
+  <Card title="Batch Tracking" icon="layer-group" href="/features/batch-tracking">
+    Supplier traceability for batches
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/stakeholders/customers">
+    Complete API documentation
+  </Card>
+</CardGroup>

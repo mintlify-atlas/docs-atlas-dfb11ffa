@@ -1,0 +1,537 @@
+---
+title: 'Stock Movements'
+description: 'Track all inventory transactions with entry, exit, and adjustment workflows using automated FIFO batch deduction'
+icon: 'arrows-turn-to-dots'
+---
+
+## Overview
+
+Stock Movements track every inventory transaction in the system. Each movement records quantity changes, pricing, costs, and links to batches for complete audit trails.
+
+<Info>
+  All inventory changes are recorded as movements, creating a complete history of stock flow through your business.
+</Info>
+
+## Movement Types
+
+The system supports three primary movement types:
+
+<CardGroup cols={3}>
+  <Card title="ENTRY" icon="arrow-down" color="#10b981">
+    Inventory additions from purchases or production
+  </Card>
+  
+  <Card title="EXIT" icon="arrow-up" color="#ef4444">
+    Inventory reductions from sales or consumption
+  </Card>
+  
+  <Card title="ADJUSTMENT" icon="wrench" color="#f59e0b">
+    Manual corrections, write-offs, or inventory counts
+  </Card>
+</CardGroup>
+
+## Movement Data Model
+
+<CodeGroup>
+```python backend/Product/Domain/movement.py
+class MovementType(str, enum.Enum):
+    ENTRY = "ENTRY"
+    EXIT = "EXIT"
+    ADJUSTMENT = "ADJUSTMENT"
+
+class Movement(Base, AuditableEntity):
+    __tablename__ = "movements"
+
+    id = Column(String(50), primary_key=True, index=True)
+    product_id = Column(String(50), ForeignKey("products.id"), nullable=False)
+    supplier_id = Column(String(50), ForeignKey("suppliers.id"), nullable=True)
+    customer_id = Column(String(50), ForeignKey("customers.id"), nullable=True)
+    type = Column(String(50), nullable=False)  # MovementType values
+    quantity = Column(Integer, nullable=False)
+    unit_price = Column(Float, nullable=True)  # Price applied to transaction
+    total_price = Column(Float, nullable=True)  # quantity * unit_price
+    total_cost = Column(Float, nullable=True)  # FIFO calculated cost for EXIT
+    reference_id = Column(String(50), nullable=True)  # Order ID or Batch ID
+    notes = Column(String(500), nullable=True)
+```
+</CodeGroup>
+
+### Key Fields
+
+<ParamField path="type" type="enum" required>
+  Movement type: `ENTRY`, `EXIT`, or `ADJUSTMENT`
+</ParamField>
+
+<ParamField path="quantity" type="integer" required>
+  Number of units moved (positive integer)
+</ParamField>
+
+<ParamField path="unit_price" type="float">
+  Selling price per unit (for EXIT movements)
+</ParamField>
+
+<ParamField path="total_price" type="float">
+  Total revenue: `quantity × unit_price` (for EXIT movements)
+</ParamField>
+
+<ParamField path="total_cost" type="float">
+  FIFO-calculated cost of goods sold (for EXIT movements)
+</ParamField>
+
+<ParamField path="reference_id" type="string">
+  Links to batch IDs (comma-separated for multi-batch exits) or order IDs
+</ParamField>
+
+<ParamField path="supplier_id" type="string">
+  Supplier reference for ENTRY movements
+</ParamField>
+
+<ParamField path="customer_id" type="string">
+  Customer reference for EXIT movements (sales)
+</ParamField>
+
+## ENTRY Movements
+
+Entry movements record inventory additions and create new batches.
+
+### Creating an Entry
+
+<CodeGroup>
+```python backend/Product/Domain/stock_service.py
+def register_entry(self, product_id: str, quantity: int, unit_cost: float, 
+                  supplier_id: Optional[str] = None, 
+                  expiration_date: Optional[datetime] = None) -> Tuple[Batch, Movement]:
+    if quantity <= 0:
+        raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
+    
+    product = self.product_repo.get_by_id(product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    # Create Batch
+    batch_id = str(uuid.uuid4())
+    new_batch = Batch(
+        id=batch_id,
+        product_id=product_id,
+        initial_quantity=quantity,
+        available_quantity=quantity,
+        unit_cost=unit_cost,
+        purchase_date=datetime.now(timezone.utc),
+        expiration_date=expiration_date,
+        supplier_id=supplier_id
+    )
+    self.repo.create_batch(new_batch)
+
+    # Create Entry Movement
+    mov_id = str(uuid.uuid4())
+    new_movement = Movement(
+        id=mov_id,
+        product_id=product_id,
+        type=MovementType.ENTRY,
+        quantity=quantity,
+        unit_price=unit_cost,
+        total_price=unit_cost * quantity,
+        reference_id=batch_id,
+        notes="Purchase Entry"
+    )
+    self.repo.create_movement(new_movement)
+    
+    return new_batch, new_movement
+```
+</CodeGroup>
+
+<Steps>
+  <Step title="Validate Input">
+    Ensure quantity > 0 and product exists
+  </Step>
+  
+  <Step title="Create Batch">
+    Generate new batch with quantity and cost details
+  </Step>
+  
+  <Step title="Create Movement">
+    Record the ENTRY movement linked to the new batch
+  </Step>
+  
+  <Step title="Return Both">
+    Return batch and movement for confirmation
+  </Step>
+</Steps>
+
+### Entry Movement Attributes
+
+| Field | Value for ENTRY |
+|-------|----------------|
+| `type` | `ENTRY` |
+| `quantity` | Units purchased |
+| `unit_price` | Cost per unit |
+| `total_price` | Total purchase cost |
+| `total_cost` | `null` (not applicable) |
+| `reference_id` | New batch ID |
+| `supplier_id` | Supplier who provided goods |
+
+## EXIT Movements
+
+Exit movements record sales or consumption using automatic FIFO batch deduction.
+
+### Registering a Sale
+
+<CodeGroup>
+```python backend/Product/Adapters/movement_controller.py
+@router.route('/sale', methods=['POST'])
+@require_role('admin', 'gestor')
+def register_sale():
+    data = request.get_json()
+    
+    unit_price = data.get('unit_price')
+    if unit_price is not None:
+        unit_price = float(unit_price)
+
+    mov, cost = stock_svc.register_exit(
+        product_id=data.get('product_id'),
+        quantity=int(data.get('quantity')),
+        unit_price=unit_price,
+        notes=data.get('notes', 'Sale')
+    )
+    
+    return jsonify({
+        "movement_id": mov.id,
+        "product_id": mov.product_id,
+        "quantity": mov.quantity,
+        "unit_price": mov.unit_price,
+        "total_price": mov.total_price,
+        "total_cost": cost
+    }), 200
+```
+</CodeGroup>
+
+<RequestExample>
+```json Request
+{
+  "product_id": "uuid-product",
+  "quantity": 50,
+  "unit_price": 18.50,
+  "notes": "Sale to customer ABC"
+}
+```
+
+```json Response
+{
+  "movement_id": "mov-uuid",
+  "product_id": "uuid-product",
+  "quantity": 50,
+  "unit_price": 18.50,
+  "total_price": 925.00,
+  "total_cost": 625.00
+}
+```
+</RequestExample>
+
+### FIFO Exit Logic
+
+<CodeGroup>
+```python backend/Product/Domain/stock_service.py
+def register_exit(self, product_id: str, quantity: int, 
+                 unit_price: Optional[float] = None, 
+                 notes: str = "") -> Tuple[Movement, float]:
+    # Use suggested price if no price provided
+    applied_unit_price = unit_price if unit_price is not None else product.suggested_price
+
+    # Get active batches sorted by expiration/purchase date
+    batches = self.repo.get_batches_by_product(product_id, active_only=True)
+    batches.sort(key=lambda b: (
+        b.expiration_date if b.expiration_date else datetime.max,
+        b.purchase_date if b.purchase_date else datetime.max
+    ))
+
+    # Check sufficient stock
+    total_available = sum(b.available_quantity for b in batches)
+    if total_available < quantity:
+        raise HTTPException(status_code=400, detail="Insufficient stock")
+
+    # Deduct from batches using FIFO
+    remaining_to_deduct = quantity
+    total_cost = 0.0
+    affected_batches = []
+
+    for batch in batches:
+        if remaining_to_deduct <= 0:
+            break
+        
+        deduct_amount = min(batch.available_quantity, remaining_to_deduct)
+        batch.available_quantity -= deduct_amount
+        remaining_to_deduct -= deduct_amount
+        total_cost += deduct_amount * batch.unit_cost
+        affected_batches.append(batch.id)
+
+    # Create EXIT Movement
+    new_movement = Movement(
+        id=str(uuid.uuid4()),
+        product_id=product_id,
+        type=MovementType.EXIT,
+        quantity=quantity,
+        unit_price=applied_unit_price,
+        total_price=applied_unit_price * quantity,
+        total_cost=total_cost,
+        reference_id=",".join(affected_batches),
+        notes=notes
+    )
+```
+</CodeGroup>
+
+<Note>
+  The `reference_id` for EXIT movements contains comma-separated batch IDs, showing exactly which batches were used to fulfill the sale.
+</Note>
+
+### Exit Movement Attributes
+
+| Field | Value for EXIT |
+|-------|---------------|
+| `type` | `EXIT` |
+| `quantity` | Units sold |
+| `unit_price` | Selling price per unit |
+| `total_price` | Revenue: `quantity × unit_price` |
+| `total_cost` | COGS from FIFO calculation |
+| `reference_id` | Affected batch IDs (comma-separated) |
+| `customer_id` | Customer who purchased (optional) |
+
+### Profit Calculation
+
+Each EXIT movement enables profit analysis:
+
+<CodeGroup>
+```javascript Profit Calculation
+const profit = movement.total_price - movement.total_cost;
+const margin = (profit / movement.total_price) * 100;
+
+console.log(`Revenue: Bs ${movement.total_price.toFixed(2)}`);
+console.log(`COGS: Bs ${movement.total_cost.toFixed(2)}`);
+console.log(`Profit: Bs ${profit.toFixed(2)}`);
+console.log(`Margin: ${margin.toFixed(1)}%`);
+```
+</CodeGroup>
+
+## ADJUSTMENT Movements
+
+Adjustments handle special cases like inventory corrections, write-offs, or physical count discrepancies.
+
+<Warning>
+  Adjustments should be used sparingly and always include detailed notes explaining the reason for the adjustment.
+</Warning>
+
+### Common Adjustment Scenarios
+
+<AccordionGroup>
+  <Accordion title="Physical Count Discrepancy" icon="calculator">
+    When actual inventory doesn't match system records after a physical count.
+  </Accordion>
+  
+  <Accordion title="Damaged Goods" icon="box-open">
+    Writing off inventory that was damaged or defective.
+  </Accordion>
+  
+  <Accordion title="Expired Products" icon="calendar-xmark">
+    Removing expired perishable items from inventory.
+  </Accordion>
+  
+  <Accordion title="Theft or Loss" icon="shield-halved">
+    Recording inventory losses due to theft or unexplained disappearance.
+  </Accordion>
+  
+  <Accordion title="Return to Supplier" icon="rotate-left">
+    Returning defective items to suppliers.
+  </Accordion>
+</AccordionGroup>
+
+## Viewing Movement History
+
+Query movements by product to see complete transaction history:
+
+<CodeGroup>
+```python backend/Product/Adapters/movement_controller.py
+@router.route('/product/<product_id>', methods=['GET'])
+@require_role('admin', 'gestor', 'consultor')
+def get_movements_by_product(product_id):
+    movements = repo.get_movements_by_product(product_id)
+    result = []
+    for m in movements:
+        result.append({
+            "id": m.id,
+            "product_id": m.product_id,
+            "type": str(m.type),
+            "quantity": m.quantity,
+            "unit_price": m.unit_price,
+            "total_price": m.total_price,
+            "total_cost": m.total_cost,
+            "reference_id": m.reference_id,
+            "notes": m.notes,
+            "created_at": m.created_at.isoformat(),
+            "created_by": m.created_by
+        })
+    return jsonify(result), 200
+```
+</CodeGroup>
+
+### Movement Display
+
+<CodeGroup>
+```jsx frontend/src/Report/UI/pages/DashboardPage.jsx
+{recentMovements.map(movement => (
+    <tr key={movement.id}>
+        <td>{new Date(movement.created_at).toLocaleString('es-ES')}</td>
+        <td>{movement.product_name}</td>
+        <td>
+            <span className={`badge ${
+                movement.type === 'ENTRY'
+                    ? 'bg-green-500/10 text-green-400'
+                    : 'bg-red-500/10 text-red-400'
+            }`}>
+                {movement.type}
+            </span>
+        </td>
+        <td>{movement.quantity}</td>
+        <td>Bs {movement.total_price?.toFixed(2)}</td>
+        <td>{movement.created_by || 'Sistema'}</td>
+    </tr>
+))}
+```
+</CodeGroup>
+
+## Advanced Movement Queries
+
+The system provides sophisticated filtering for movement analysis:
+
+<CodeGroup>
+```python backend/Report/Adapters/report_controller.py
+@router.route('/movements/search', methods=['GET'])
+@require_role('admin', 'gestor', 'consultor')
+def search_movements():
+    # Parse parameters
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    product_id = request.args.get('product_id')
+    movement_type = request.args.get('movement_type')
+    user_id = request.args.get('user_id')
+    skip = int(request.args.get('skip', 0))
+    limit = int(request.args.get('limit', 100))
+    
+    movements = repo.search_movements(
+        start_date=start_date,
+        end_date=end_date,
+        product_id=product_id,
+        movement_type=movement_type,
+        user_id=user_id,
+        skip=skip,
+        limit=limit
+    )
+    
+    return jsonify({"movements": movements}), 200
+```
+</CodeGroup>
+
+### Query Filters
+
+<ParamField query="start_date" type="date">
+  Filter movements after this date (YYYY-MM-DD)
+</ParamField>
+
+<ParamField query="end_date" type="date">
+  Filter movements before this date (YYYY-MM-DD)
+</ParamField>
+
+<ParamField query="product_id" type="string">
+  Filter by specific product
+</ParamField>
+
+<ParamField query="movement_type" type="enum">
+  Filter by type: `ENTRY`, `EXIT`, or `ADJUSTMENT`
+</ParamField>
+
+<ParamField query="user_id" type="string">
+  Filter by user who created the movement
+</ParamField>
+
+<ParamField query="skip" type="integer" default="0">
+  Pagination offset
+</ParamField>
+
+<ParamField query="limit" type="integer" default="100">
+  Maximum results to return
+</ParamField>
+
+## Audit Trail
+
+All movements inherit from `AuditableEntity`, automatically tracking:
+
+<CardGroup cols={2}>
+  <Card title="Creation Time" icon="clock">
+    `created_at` timestamp when the movement was recorded
+  </Card>
+  
+  <Card title="Created By" icon="user">
+    `created_by` user ID who initiated the movement
+  </Card>
+  
+  <Card title="Last Modified" icon="pen-to-square">
+    `updated_at` timestamp of last modification
+  </Card>
+  
+  <Card title="Modified By" icon="user-pen">
+    `updated_by` user ID who last modified the record
+  </Card>
+</CardGroup>
+
+<Info>
+  Movements are generally immutable once created. Corrections should be made through ADJUSTMENT movements rather than modifying historical records.
+</Info>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always Add Notes">
+    Include descriptive notes for every movement, especially adjustments, to maintain clear audit trails.
+  </Accordion>
+  
+  <Accordion title="Link Stakeholders">
+    Associate movements with suppliers (ENTRY) or customers (EXIT) for complete transaction context.
+  </Accordion>
+  
+  <Accordion title="Use Correct Prices">
+    For EXIT movements, use actual selling prices to enable accurate profit analysis.
+  </Accordion>
+  
+  <Accordion title="Verify Stock Before EXIT">
+    The system checks stock availability, but verify expectations before large sales.
+  </Accordion>
+  
+  <Accordion title="Document Adjustments">
+    Adjustments should always have detailed notes explaining why the correction was necessary.
+  </Accordion>
+</AccordionGroup>
+
+## Movement Analytics
+
+Movements power various reports and analytics:
+
+- **Inventory Rotation**: Analyze entry vs. exit patterns
+- **Profit Margins**: Compare `total_price` vs. `total_cost` for EXIT movements
+- **User Activity**: Track which users are creating the most movements
+- **Product Velocity**: Identify fast vs. slow-moving products
+
+See [Inventory Reports](/features/inventory-reports) for detailed analytics.
+
+## Related Documentation
+
+<CardGroup cols={3}>
+  <Card title="Batch Tracking" icon="layer-group" href="/features/batch-tracking">
+    Understand FIFO batch management
+  </Card>
+  
+  <Card title="Inventory Reports" icon="chart-line" href="/features/inventory-reports">
+    Analyze movement data and trends
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/movements/overview">
+    Complete API documentation
+  </Card>
+</CardGroup>

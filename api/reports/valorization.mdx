@@ -1,0 +1,187 @@
+---
+title: Valorization Reports
+description: Inventory valuation reports at specific dates with export capabilities
+---
+
+## Get Valorization Report
+
+<Card title="GET /api/v1/reports/valorization" icon="money-bill-trend-up">
+  Retrieves the inventory valorization report at a specific date, showing total value and detailed breakdown by product and batch.
+</Card>
+
+### Query Parameters
+
+<ParamField query="date" type="string" required>
+  Target date for valorization report in `YYYY-MM-DD` format (e.g., `2026-03-04`)
+</ParamField>
+
+### Authorization
+
+Requires one of the following roles:
+- `admin`
+- `gestor`
+- `consultor`
+
+### Response
+
+```json
+{
+  "status": "success",
+  "report": {
+    "date": "2026-03-04",
+    "total_value": 150000.50,
+    "currency": "Bs",
+    "details_by_product": [
+      {
+        "product_id": "123e4567-e89b-12d3-a456-426614174000",
+        "product_name": "Product A",
+        "product_sku": "SKU-001",
+        "total_quantity": 100,
+        "average_unit_cost": 50.25,
+        "total_cost": 5025.00
+      }
+    ],
+    "details_by_batch": [
+      {
+        "batch_id": "BATCH-001",
+        "product_id": "123e4567-e89b-12d3-a456-426614174000",
+        "product_name": "Product A",
+        "quantity_available": 50,
+        "unit_cost": 50.00,
+        "total_cost": 2500.00
+      }
+    ]
+  }
+}
+```
+
+### Error Responses
+
+<ResponseField name="400" type="error">
+  Missing or invalid date parameter
+  ```json
+  {
+    "error": "Missing 'date' parameter (YYYY-MM-DD)"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="400" type="error">
+  Invalid date format
+  ```json
+  {
+    "error": "Invalid date format. Use YYYY-MM-DD"
+  }
+  ```
+</ResponseField>
+
+### Code Reference
+
+Implemented in `backend/Report/Adapters/report_controller.py:111`
+
+---
+
+## Export Valorization Report
+
+<Card title="GET /api/v1/reports/valorization/export" icon="file-export">
+  Exports the valorization report in CSV, PDF, or JSON format.
+</Card>
+
+### Query Parameters
+
+<ParamField query="date" type="string" required>
+  Target date for valorization report in `YYYY-MM-DD` format
+</ParamField>
+
+<ParamField query="format" type="string" default="csv">
+  Export format. Available options:
+  - `csv` - Comma-separated values file
+  - `pdf` - PDF document (not yet implemented)
+  - `json` - JSON format
+</ParamField>
+
+### Authorization
+
+Requires one of the following roles:
+- `admin`
+- `gestor`
+- `consultor`
+
+### CSV Export Format
+
+The CSV export includes:
+1. **Header Section**: Report date and total value
+2. **Product Summary**: Aggregated data by product with average costs
+3. **Batch Details**: Detailed breakdown by individual batches
+
+```csv
+Reporte de Valorización de Inventario
+Fecha,2026-03-04
+Valor Total,Bs 150000.50
+
+RESUMEN POR PRODUCTO
+Producto,SKU,Cantidad,Costo Unitario Promedio,Costo Total
+Product A,SKU-001,100,Bs 50.25,Bs 5025.00
+
+DETALLE POR LOTE
+Producto,Lote ID,Cantidad,Costo Unitario,Costo Total
+Product A,BATCH-001,50,Bs 50.00,Bs 2500.00
+```
+
+### JSON Export Format
+
+Returns the same structure as the standard valorization report endpoint.
+
+### Response Headers
+
+For CSV format:
+```
+Content-Type: text/csv
+Content-Disposition: attachment; filename="valorization_2026-03-04.csv"
+```
+
+### Error Responses
+
+<ResponseField name="400" type="error">
+  Missing date parameter
+  ```json
+  {
+    "error": "Missing 'date' parameter"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="400" type="error">
+  Invalid format
+  ```json
+  {
+    "error": "Format debe ser 'csv', 'pdf' o 'json'"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="400" type="error">
+  Invalid date format
+  ```json
+  {
+    "error": "Invalid date format"
+  }
+  ```
+</ResponseField>
+
+### Example Usage
+
+```bash
+# Export as CSV
+curl -X GET "https://api.example.com/api/v1/reports/valorization/export?date=2026-03-04&format=csv" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -o valorization_report.csv
+
+# Export as JSON
+curl -X GET "https://api.example.com/api/v1/reports/valorization/export?date=2026-03-04&format=json" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Code Reference
+
+Implemented in `backend/Report/Adapters/report_controller.py:141`

@@ -1,0 +1,473 @@
+---
+title: 'Roles & Permissions'
+description: 'Understand the three user roles and their access permissions'
+icon: 'user-shield'
+---
+
+## Overview
+
+The Inventory Management System implements a role-based access control (RBAC) system with three predefined roles. Each role has specific permissions that determine which operations users can perform.
+
+## Role Architecture
+
+Roles are defined in the database and assigned to users during account creation. The system uses the `@require_role` decorator to enforce permissions at the API endpoint level.
+
+**Location**: `backend/User/Domain/role.py`
+
+```python
+class Role(Base):
+    """Entidad Rol del sistema."""
+    __tablename__ = "roles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    name = Column(String(50), unique=True, nullable=False, index=True)
+    description = Column(String(255), nullable=True)
+```
+
+## Predefined Roles
+
+From `user_service.py:12-16`:
+
+```python
+PREDEFINED_ROLES = [
+    {"name": "admin", "description": "Acceso total: gestión de usuarios, auditoría y todas las funcionalidades."},
+    {"name": "gestor", "description": "Gestiona productos, lotes, entradas, salidas y reportes. Sin administración de usuarios."},
+    {"name": "consultor", "description": "Solo lectura en todas las secciones del sistema."},
+]
+```
+
+### Admin
+
+<Card title="Administrator" icon="crown" color="#FF6B6B">
+  Full system access including user management, audit logs, and all CRUD operations.
+</Card>
+
+**Capabilities**:
+- Full user management (create, read, update, deactivate)
+- Access to audit logs and system monitoring
+- Manage products, batches, inventory movements
+- Manage suppliers and customers
+- Generate and view all reports
+- System configuration
+
+**Example Permissions**:
+
+```python
+# User Management (user_controller.py)
+@router.route('/', methods=['GET'])
+@require_role('admin')  # line 23
+def list_users():
+    """Lista todos los usuarios. Solo admin."""
+
+@router.route('/', methods=['POST'])
+@require_role('admin')  # line 62
+def create_user():
+    """Crea un nuevo usuario. Solo admin."""
+
+# Audit Logs (audit_controller.py)
+@require_role('admin')
+def get_audit_logs():
+    """Access system audit logs"""
+```
+
+### Gestor (Manager)
+
+<Card title="Manager" icon="user-gear" color="#4ECDC4">
+  Manages inventory operations, products, and business relationships. Cannot manage users.
+</Card>
+
+**Capabilities**:
+- Create, update, and delete products
+- Manage inventory batches and stock levels
+- Record inventory movements (entries/exits)
+- Manage suppliers and customers
+- Generate and view all reports
+- ❌ No user management access
+- ❌ No audit log access
+
+**Example Permissions**:
+
+```python
+# Product Management (product_controller.py)
+@require_role('admin', 'gestor')  # line 10
+def create_product():
+    """Gestor can create products"""
+
+@require_role('admin', 'gestor')  # line 14
+def update_product():
+    """Gestor can update products"""
+
+# Batch Management (batch_controller.py)
+@require_role('admin', 'gestor')
+def create_batch():
+    """Gestor can create batches"""
+
+# Inventory Movements (movement_controller.py)
+@require_role('admin', 'gestor')
+def create_movement():
+    """Gestor can record movements"""
+
+# Stakeholder Management (customer_controller.py, supplier_controller.py)
+@require_role('admin', 'gestor')
+def create_customer():
+    """Gestor can create customers"""
+
+@require_role('admin', 'gestor')
+def create_supplier():
+    """Gestor can create suppliers"""
+```
+
+### Consultor (Consultant)
+
+<Card title="Consultant" icon="eye" color="#95E1D3">
+  Read-only access to all inventory data and reports. Cannot modify any records.
+</Card>
+
+**Capabilities**:
+- View all products and inventory levels
+- View batch information
+- View inventory movement history
+- View supplier and customer information
+- Generate and view all reports
+- ❌ No create, update, or delete operations
+- ❌ No user management
+- ❌ No audit log access
+
+**Example Permissions**:
+
+```python
+# Product Viewing (product_controller.py)
+@require_role('admin', 'gestor', 'consultor')  # line 11
+def get_products():
+    """Consultor can view products"""
+
+@require_role('admin', 'gestor', 'consultor')  # line 12
+def get_product():
+    """Consultor can view product details"""
+
+# Batch Viewing (batch_controller.py)
+@require_role('admin', 'gestor', 'consultor')
+def get_batches():
+    """Consultor can view batches"""
+
+# Movement Viewing (movement_controller.py)
+@require_role('admin', 'gestor', 'consultor')
+def get_movements():
+    """Consultor can view movement history"""
+
+# Reports (report_controller.py)
+@require_role('admin', 'gestor', 'consultor')
+def get_reports():
+    """Consultor can generate reports"""
+
+# Stakeholder Viewing (stakeholder_controller.py)
+@require_role('admin', 'gestor', 'consultor')
+def get_stakeholders():
+    """Consultor can view all stakeholders"""
+```
+
+## Permission Matrix
+
+Complete breakdown of permissions by role:
+
+| Feature | Admin | Gestor | Consultor |
+|---------|-------|--------|------------|
+| **User Management** |
+| Create users | ✅ | ❌ | ❌ |
+| View users | ✅ | ❌ | ❌ |
+| Update users | ✅ | ❌ | ❌ |
+| Deactivate users | ✅ | ❌ | ❌ |
+| View roles | ✅ | ❌ | ❌ |
+| **Audit & Logs** |
+| View audit logs | ✅ | ❌ | ❌ |
+| View system logs | ✅ | ❌ | ❌ |
+| **Product Management** |
+| Create products | ✅ | ✅ | ❌ |
+| View products | ✅ | ✅ | ✅ |
+| Update products | ✅ | ✅ | ❌ |
+| Delete products | ✅ | ✅ | ❌ |
+| **Batch Management** |
+| Create batches | ✅ | ✅ | ❌ |
+| View batches | ✅ | ✅ | ✅ |
+| Update batches | ✅ | ✅ | ❌ |
+| **Inventory Movements** |
+| Create movements | ✅ | ✅ | ❌ |
+| View movements | ✅ | ✅ | ✅ |
+| **Stakeholder Management** |
+| Create suppliers | ✅ | ✅ | ❌ |
+| View suppliers | ✅ | ✅ | ✅ |
+| Update suppliers | ✅ | ✅ | ❌ |
+| Create customers | ✅ | ✅ | ❌ |
+| View customers | ✅ | ✅ | ✅ |
+| Update customers | ✅ | ✅ | ❌ |
+| **Reports** |
+| Generate reports | ✅ | ✅ | ✅ |
+| View reports | ✅ | ✅ | ✅ |
+| Export reports | ✅ | ✅ | ✅ |
+
+## Authorization Implementation
+
+The `@require_role` decorator enforces permissions at the API level.
+
+### Middleware Implementation
+
+From `auth_middleware.py:11-65`:
+
+```python
+def require_role(*roles):
+    """Decorador de autorización basado en rol."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            user_role = request.headers.get("X-User-Role", "").lower().strip()
+
+            if not user_role:
+                return jsonify({
+                    "status": "error",
+                    "code": 401,
+                    "error": "Unauthorized",
+                    "message": "Se requiere autenticación."
+                }), 401
+
+            if user_role not in VALID_ROLES:
+                return jsonify({
+                    "status": "error",
+                    "code": 403,
+                    "error": "Forbidden",
+                    "message": f"Rol '{user_role}' no reconocido."
+                }), 403
+
+            allowed = [r.lower() for r in roles]
+            if user_role not in allowed:
+                return jsonify({
+                    "status": "error",
+                    "code": 403,
+                    "error": "Forbidden",
+                    "message": f"El rol '{user_role}' no tiene permiso."
+                }), 403
+
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
+```
+
+### Usage Examples
+
+<CodeGroup>
+
+```python Single Role
+@router.route('/users', methods=['GET'])
+@require_role('admin')  # Only admin can access
+def list_users():
+    pass
+```
+
+```python Multiple Roles
+@router.route('/products', methods=['GET'])
+@require_role('admin', 'gestor', 'consultor')  # All roles can access
+def get_products():
+    pass
+```
+
+```python Mixed Permissions
+@router.route('/products', methods=['POST'])
+@require_role('admin', 'gestor')  # Only admin and gestor
+def create_product():
+    pass
+```
+
+</CodeGroup>
+
+## Error Responses
+
+### 401 Unauthorized
+
+```json
+{
+  "status": "error",
+  "code": 401,
+  "error": "Unauthorized",
+  "message": "Se requiere autenticación. Proporcione el header X-User-Role."
+}
+```
+
+Occurs when:
+- No `X-User-Role` header is provided
+- User is not authenticated
+
+### 403 Forbidden
+
+```json
+{
+  "status": "error",
+  "code": 403,
+  "error": "Forbidden",
+  "message": "El rol 'consultor' no tiene permiso para acceder a este recurso."
+}
+```
+
+Occurs when:
+- User role is not authorized for the requested operation
+- Invalid role name provided
+
+## Default Admin Account
+
+The system creates a default admin account on first startup:
+
+From `user_service.py:18-22`:
+
+```python
+DEFAULT_ADMIN = {
+    "username": "admin",
+    "email": "admin@inventoryapp.com",
+    "password": "Admin1234!",
+}
+```
+
+<Warning>
+  Change the default admin password immediately after first login for security.
+</Warning>
+
+## Role Seeding
+
+Roles and the default admin user are automatically created on system initialization:
+
+From `user_service.py:101-136`:
+
+```python
+@staticmethod
+def seed_roles_and_admin(db) -> None:
+    """Precarga los roles predefinidos y crea el usuario admin inicial."""
+    role_repo = RoleRepository(db)
+    user_repo = UserRepository(db)
+
+    # Crear roles si no existen
+    for role_data in PREDEFINED_ROLES:
+        existing = role_repo.get_by_name(role_data["name"])
+        if not existing:
+            role = Role(name=role_data["name"], description=role_data["description"])
+            role_repo.create(role)
+            logger.info("Rol '%s' creado.", role_data["name"])
+
+    # Crear usuario admin inicial si no existe
+    admin_user = user_repo.get_by_username(DEFAULT_ADMIN["username"])
+    if not admin_user:
+        admin_role = role_repo.get_by_name("admin")
+        if admin_role:
+            admin = User(
+                id=str(uuid.uuid4()),
+                username=DEFAULT_ADMIN["username"],
+                email=DEFAULT_ADMIN["email"],
+                password_hash=generate_password_hash(DEFAULT_ADMIN["password"]),
+                active=True,
+                role_id=admin_role.id,
+            )
+            user_repo.create(admin)
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Principle of Least Privilege">
+    Always assign users the minimum role required for their job function. Start with consultor and escalate only when needed.
+  </Accordion>
+
+  <Accordion title="Regular Access Reviews">
+    Periodically review user roles and deactivate accounts that no longer need access.
+  </Accordion>
+
+  <Accordion title="Role Assignment Logging">
+    All role changes are logged in the audit system for compliance and security tracking.
+  </Accordion>
+
+  <Accordion title="Avoid Custom Roles">
+    The system is designed with three roles that cover most use cases. Avoid creating custom roles unless absolutely necessary.
+  </Accordion>
+</AccordionGroup>
+
+## Permission Checking Flow
+
+<Steps>
+  <Step title="Request Received">
+    API receives request with `X-User-Role` header
+  </Step>
+
+  <Step title="Role Validation">
+    Middleware checks if role exists in `VALID_ROLES = {"admin", "gestor", "consultor"}`
+  </Step>
+
+  <Step title="Permission Check">
+    Decorator compares user role against allowed roles for the endpoint
+  </Step>
+
+  <Step title="Access Decision">
+    If authorized, request proceeds. If not, return 403 Forbidden.
+  </Step>
+</Steps>
+
+## Common Scenarios
+
+<CardGroup cols={2}>
+  <Card title="New Employee" icon="user-plus">
+    Create account with **consultor** role for initial read-only access. Escalate to gestor after training.
+  </Card>
+
+  <Card title="Inventory Manager" icon="boxes-stacked">
+    Assign **gestor** role for full inventory management without user administration rights.
+  </Card>
+
+  <Card title="IT Administrator" icon="screwdriver-wrench">
+    Assign **admin** role for system configuration and user management.
+  </Card>
+
+  <Card title="External Auditor" icon="magnifying-glass">
+    Create **consultor** account with time-limited access for read-only reporting.
+  </Card>
+</CardGroup>
+
+## API Endpoints for Roles
+
+### List Available Roles
+
+```bash
+GET /api/v1/users/roles
+X-User-Role: admin
+```
+
+**Response**:
+```json
+{
+  "status": "success",
+  "roles": [
+    {
+      "id": 1,
+      "name": "admin",
+      "description": "Acceso total: gestión de usuarios, auditoría y todas las funcionalidades."
+    },
+    {
+      "id": 2,
+      "name": "gestor",
+      "description": "Gestiona productos, lotes, entradas, salidas y reportes. Sin administración de usuarios."
+    },
+    {
+      "id": 3,
+      "name": "consultor",
+      "description": "Solo lectura en todas las secciones del sistema."
+    }
+  ]
+}
+```
+
+From `user_controller.py:43-57`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="User Management" href="/users/user-management" icon="users">
+    Learn how to create and manage user accounts
+  </Card>
+
+  <Card title="Authentication" href="/users/authentication" icon="lock">
+    Understand the login and authentication flow
+  </Card>
+</CardGroup>

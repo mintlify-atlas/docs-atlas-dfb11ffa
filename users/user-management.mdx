@@ -1,0 +1,802 @@
+---
+title: 'User Management'
+description: 'Create, update, and manage user accounts in the system'
+icon: 'users'
+---
+
+## Overview
+
+User management in the Inventory Management System is exclusively available to administrators. This includes creating new users, assigning roles, updating user information, and deactivating accounts.
+
+<Warning>
+  All user management operations require the **admin** role. Gestor and consultor roles cannot access these endpoints.
+</Warning>
+
+## Architecture
+
+User management is implemented using clean architecture:
+
+- **Controller**: `backend/User/Adapters/user_controller.py`
+- **Service Layer**: `backend/User/Domain/user_service.py`
+- **Domain Model**: `backend/User/Domain/user.py`
+- **Repository**: `backend/User/Adapters/user_repository.py`
+
+## User Entity
+
+From `user.py:6-31`:
+
+```python
+class User(Base):
+    """Entidad Usuario del sistema."""
+    __tablename__ = "users"
+
+    id = Column(String(50), primary_key=True, index=True)
+    username = Column(String(100), unique=True, nullable=False, index=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    active = Column(Boolean, default=True, nullable=False)
+    role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
+
+    role = relationship("Role", lazy="joined")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "username": self.username,
+            "email": self.email,
+            "active": self.active,
+            "role_id": self.role_id,
+            "role_name": self.role.name if self.role else None,
+        }
+```
+
+### User Fields
+
+| Field | Type | Description | Constraints |
+|-------|------|-------------|-------------|
+| `id` | String(50) | Unique user identifier | Primary key, auto-generated UUID |
+| `username` | String(100) | Login username | Unique, required, indexed |
+| `email` | String(255) | User email address | Unique, required, indexed |
+| `password_hash` | String(255) | Hashed password | Required, never exposed in API |
+| `active` | Boolean | Account status | Default: true |
+| `role_id` | Integer | Foreign key to roles table | Required |
+
+## Creating Users
+
+### Endpoint
+
+```
+POST /api/v1/users/
+```
+
+### Required Permission
+
+```python
+@require_role('admin')  # user_controller.py:62
+```
+
+### Request
+
+**Headers**
+```
+Content-Type: application/json
+X-User-Role: admin
+```
+
+**Body**
+```json
+{
+  "username": "jdoe",
+  "email": "jdoe@company.com",
+  "password": "SecurePass123!",
+  "role_id": 2
+}
+```
+
+### Response
+
+**Success (201)**
+```json
+{
+  "status": "success",
+  "message": "Usuario 'jdoe' creado exitosamente.",
+  "user": {
+    "id": "a3d5f678-1234-5678-9abc-def012345678",
+    "username": "jdoe",
+    "email": "jdoe@company.com",
+    "active": true,
+    "role_id": 2,
+    "role_name": "gestor"
+  }
+}
+```
+
+**Error (400)**
+```json
+{
+  "status": "error",
+  "message": "El nombre de usuario 'jdoe' ya está en uso."
+}
+```
+
+### Implementation
+
+From `user_controller.py:61-98`:
+
+```python
+@router.route('/', methods=['POST'])
+@require_role('admin')
+def create_user():
+    """Crea un nuevo usuario. Solo admin. Envía email de bienvenida (mock)."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"status": "error", "message": "Body requerido."}), 400
+
+        required = ['username', 'email', 'password', 'role_id']
+        missing = [f for f in required if not data.get(f)]
+        if missing:
+            return jsonify({
+                "status": "error", 
+                "message": f"Campos requeridos: {', '.join(missing)}"
+            }), 400
+
+        db = next(get_db())
+        service = _get_service(db)
+
+        user = service.create_user(
+            username=data['username'],
+            email=data['email'],
+            password=data['password'],
+            role_id=int(data['role_id']),
+        )
+
+        # Enviar email de bienvenida (mock)
+        email_provider.send_welcome(email=user.email, username=user.username)
+
+        return jsonify({
+            "status": "success",
+            "message": f"Usuario '{user.username}' creado exitosamente.",
+            "user": user.to_dict()
+        }), 201
+    except ValueError as ve:
+        return jsonify({"status": "error", "message": str(ve)}), 400
+```
+
+### Service Logic
+
+From `user_service.py:38-58`:
+
+```python
+def create_user(self, username: str, email: str, password: str, role_id: int) -> User:
+    # Verificar duplicados
+    if self.user_repo.get_by_username(username):
+        raise ValueError(f"El nombre de usuario '{username}' ya está en uso.")
+    if self.user_repo.get_by_email(email):
+        raise ValueError(f"El email '{email}' ya está registrado.")
+
+    # Verificar que el rol exista
+    role = self.role_repo.get_by_id(role_id)
+    if not role:
+        raise ValueError(f"El rol con id {role_id} no existe.")
+
+    user = User(
+        id=str(uuid.uuid4()),
+        username=username,
+        email=email,
+        password_hash=generate_password_hash(password),
+        active=True,
+        role_id=role_id,
+    )
+    return self.user_repo.create(user)
+```
+
+### Validations
+
+<AccordionGroup>
+  <Accordion title="Username Uniqueness">
+    The username must be unique across the system. Duplicate usernames are rejected with error message.
+  </Accordion>
+
+  <Accordion title="Email Uniqueness">
+    Email addresses must be unique. Attempting to register a duplicate email returns an error.
+  </Accordion>
+
+  <Accordion title="Role Validation">
+    The role_id must reference an existing role (1=admin, 2=gestor, 3=consultor). Invalid role IDs are rejected.
+  </Accordion>
+
+  <Accordion title="Password Security">
+    Passwords are hashed using `werkzeug.security.generate_password_hash` before storage. Plain text passwords are never stored.
+  </Accordion>
+</AccordionGroup>
+
+### Welcome Email
+
+When a user is created, a welcome email is sent (currently mocked):
+
+```python
+email_provider.send_welcome(email=user.email, username=user.username)
+```
+
+<Info>
+  Email functionality is currently mocked for development. In production, this will send actual emails via the configured email provider.
+</Info>
+
+## Listing Users
+
+### Endpoint
+
+```
+GET /api/v1/users/
+```
+
+### Required Permission
+
+```python
+@require_role('admin')  # user_controller.py:23
+```
+
+### Request
+
+```bash
+GET /api/v1/users/?skip=0&limit=100
+X-User-Role: admin
+```
+
+**Query Parameters**:
+- `skip` (optional): Number of records to skip (default: 0)
+- `limit` (optional): Maximum records to return (default: 100)
+
+### Response
+
+```json
+{
+  "status": "success",
+  "count": 3,
+  "users": [
+    {
+      "id": "uuid-1",
+      "username": "admin",
+      "email": "admin@inventoryapp.com",
+      "active": true,
+      "role_id": 1,
+      "role_name": "admin"
+    },
+    {
+      "id": "uuid-2",
+      "username": "jdoe",
+      "email": "jdoe@company.com",
+      "active": true,
+      "role_id": 2,
+      "role_name": "gestor"
+    },
+    {
+      "id": "uuid-3",
+      "username": "viewer",
+      "email": "viewer@company.com",
+      "active": false,
+      "role_id": 3,
+      "role_name": "consultor"
+    }
+  ]
+}
+```
+
+From `user_controller.py:22-39`
+
+## Getting User Details
+
+### Endpoint
+
+```
+GET /api/v1/users/<user_id>
+```
+
+### Required Permission
+
+```python
+@require_role('admin')  # user_controller.py:103
+```
+
+### Request
+
+```bash
+GET /api/v1/users/a3d5f678-1234-5678-9abc-def012345678
+X-User-Role: admin
+```
+
+### Response
+
+**Success (200)**
+```json
+{
+  "status": "success",
+  "user": {
+    "id": "a3d5f678-1234-5678-9abc-def012345678",
+    "username": "jdoe",
+    "email": "jdoe@company.com",
+    "active": true,
+    "role_id": 2,
+    "role_name": "gestor"
+  }
+}
+```
+
+**Not Found (404)**
+```json
+{
+  "status": "error",
+  "message": "Usuario no encontrado."
+}
+```
+
+From `user_controller.py:102-115`
+
+## Updating Users
+
+### Endpoint
+
+```
+PUT /api/v1/users/<user_id>
+```
+
+### Required Permission
+
+```python
+@require_role('admin')  # user_controller.py:120
+```
+
+### Request
+
+**Headers**
+```
+Content-Type: application/json
+X-User-Role: admin
+```
+
+**Body** (all fields optional)
+```json
+{
+  "username": "john.doe",
+  "email": "john.doe@company.com",
+  "role_id": 1,
+  "password": "NewPassword123!",
+  "active": true
+}
+```
+
+### Response
+
+**Success (200)**
+```json
+{
+  "status": "success",
+  "message": "Usuario actualizado correctamente.",
+  "user": {
+    "id": "a3d5f678-1234-5678-9abc-def012345678",
+    "username": "john.doe",
+    "email": "john.doe@company.com",
+    "active": true,
+    "role_id": 1,
+    "role_name": "admin"
+  }
+}
+```
+
+### Implementation
+
+From `user_controller.py:119-146`:
+
+```python
+@router.route('/<user_id>', methods=['PUT'])
+@require_role('admin')
+def update_user(user_id):
+    """Edita un usuario existente. Solo admin."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"status": "error", "message": "Body requerido."}), 400
+
+        # Convertir role_id a int si viene en los datos
+        if 'role_id' in data:
+            data['role_id'] = int(data['role_id'])
+
+        db = next(get_db())
+        service = _get_service(db)
+        user = service.update_user(user_id, data)
+
+        return jsonify({
+            "status": "success",
+            "message": "Usuario actualizado correctamente.",
+            "user": user.to_dict()
+        }), 200
+    except ValueError as ve:
+        return jsonify({"status": "error", "message": str(ve)}), 400
+```
+
+### Service Logic
+
+From `user_service.py:60-87`:
+
+```python
+def update_user(self, user_id: str, data: dict) -> User:
+    user = self.user_repo.get_by_id(user_id)
+    if not user:
+        raise ValueError("Usuario no encontrado.")
+
+    if "username" in data and data["username"] != user.username:
+        if self.user_repo.get_by_username(data["username"]):
+            raise ValueError(f"El nombre de usuario '{data['username']}' ya está en uso.")
+        user.username = data["username"]
+
+    if "email" in data and data["email"] != user.email:
+        if self.user_repo.get_by_email(data["email"]):
+            raise ValueError(f"El email '{data['email']}' ya está registrado.")
+        user.email = data["email"]
+
+    if "role_id" in data:
+        role = self.role_repo.get_by_id(data["role_id"])
+        if not role:
+            raise ValueError(f"El rol con id {data['role_id']} no existe.")
+        user.role_id = data["role_id"]
+
+    if "password" in data and data["password"]:
+        user.password_hash = generate_password_hash(data["password"])
+
+    if "active" in data:
+        user.active = bool(data["active"])
+
+    return self.user_repo.update(user)
+```
+
+### Update Validations
+
+- Username and email uniqueness are checked only if changed
+- Role ID must reference a valid role
+- Password is re-hashed if updated
+- All fields are optional - only provided fields are updated
+
+## Deactivating Users
+
+### Endpoint
+
+```
+PATCH /api/v1/users/<user_id>/deactivate
+```
+
+### Required Permission
+
+```python
+@require_role('admin')  # user_controller.py:151
+```
+
+### Request
+
+```bash
+PATCH /api/v1/users/a3d5f678-1234-5678-9abc-def012345678/deactivate
+X-User-Role: admin
+```
+
+### Response
+
+```json
+{
+  "status": "success",
+  "message": "Usuario 'jdoe' desactivado.",
+  "user": {
+    "id": "a3d5f678-1234-5678-9abc-def012345678",
+    "username": "jdoe",
+    "email": "jdoe@company.com",
+    "active": false,
+    "role_id": 2,
+    "role_name": "gestor"
+  }
+}
+```
+
+### Implementation
+
+From `user_controller.py:150-167`:
+
+```python
+@router.route('/<user_id>/deactivate', methods=['PATCH'])
+@require_role('admin')
+def deactivate_user(user_id):
+    """Desactiva un usuario. Solo admin."""
+    try:
+        db = next(get_db())
+        service = _get_service(db)
+        user = service.deactivate_user(user_id)
+        return jsonify({
+            "status": "success",
+            "message": f"Usuario '{user.username}' desactivado.",
+            "user": user.to_dict()
+        }), 200
+    except ValueError as ve:
+        return jsonify({"status": "error", "message": str(ve)}), 400
+```
+
+### Service Logic
+
+From `user_service.py:89-94`:
+
+```python
+def deactivate_user(self, user_id: str) -> User:
+    user = self.user_repo.get_by_id(user_id)
+    if not user:
+        raise ValueError("Usuario no encontrado.")
+    user.active = False
+    return self.user_repo.update(user)
+```
+
+<Warning>
+  Deactivated users cannot log in. The authentication system checks the `active` status during login and rejects inactive accounts.
+</Warning>
+
+### Reactivating Users
+
+To reactivate a user, use the update endpoint:
+
+```bash
+PUT /api/v1/users/<user_id>
+Content-Type: application/json
+X-User-Role: admin
+
+{
+  "active": true
+}
+```
+
+## Role Assignment
+
+### Getting Available Roles
+
+```bash
+GET /api/v1/users/roles
+X-User-Role: admin
+```
+
+**Response**:
+```json
+{
+  "status": "success",
+  "roles": [
+    {"id": 1, "name": "admin", "description": "Acceso total..."},
+    {"id": 2, "name": "gestor", "description": "Gestiona productos..."},
+    {"id": 3, "name": "consultor", "description": "Solo lectura..."}
+  ]
+}
+```
+
+From `user_controller.py:43-57`
+
+### Changing User Roles
+
+Roles are assigned during user creation or changed via the update endpoint:
+
+```bash
+PUT /api/v1/users/<user_id>
+Content-Type: application/json
+X-User-Role: admin
+
+{
+  "role_id": 1
+}
+```
+
+<Info>
+  Role changes take effect immediately. Users must re-authenticate to receive updated permissions.
+</Info>
+
+## User Lifecycle
+
+<Steps>
+  <Step title="User Creation">
+    Admin creates user account with username, email, password, and role assignment. System generates UUID and hashes password.
+  </Step>
+
+  <Step title="Welcome Email">
+    System sends welcome email (mocked) with login credentials and getting started information.
+  </Step>
+
+  <Step title="First Login">
+    User logs in with credentials. System validates account is active and returns user details with role.
+  </Step>
+
+  <Step title="Active Usage">
+    User accesses system features based on assigned role permissions. All actions are logged to audit system.
+  </Step>
+
+  <Step title="Role Changes">
+    Admin updates user role as responsibilities change. User must re-authenticate for new permissions.
+  </Step>
+
+  <Step title="Deactivation">
+    When user leaves or account is compromised, admin deactivates account. User can no longer log in.
+  </Step>
+
+  <Step title="Reactivation (Optional)">
+    If needed, admin can reactivate account by setting active=true. User regains access with existing credentials.
+  </Step>
+</Steps>
+
+## Common Operations
+
+<CardGroup cols={2}>
+  <Card title="Create Manager Account" icon="user-plus">
+    Create user with `role_id: 2` (gestor) for inventory management staff.
+  </Card>
+
+  <Card title="Promote to Admin" icon="arrow-up">
+    Update existing user with `role_id: 1` to grant full administrative access.
+  </Card>
+
+  <Card title="Reset Password" icon="key">
+    Update user with new `password` field. System will hash the new password automatically.
+  </Card>
+
+  <Card title="Temporary Deactivation" icon="user-lock">
+    Use deactivate endpoint for temporary access suspension. Reactivate via update endpoint.
+  </Card>
+</CardGroup>
+
+## Error Handling
+
+| Error Code | Scenario | Message |
+|------------|----------|----------|
+| 400 | Missing required fields | "Campos requeridos: username, email, password, role_id" |
+| 400 | Duplicate username | "El nombre de usuario 'jdoe' ya está en uso." |
+| 400 | Duplicate email | "El email 'jdoe@company.com' ya está registrado." |
+| 400 | Invalid role ID | "El rol con id 99 no existe." |
+| 404 | User not found | "Usuario no encontrado." |
+| 401 | Missing auth header | "Se requiere autenticación." |
+| 403 | Insufficient permissions | "El rol 'gestor' no tiene permiso." |
+| 500 | Server error | "Error interno del servidor" |
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Strong Passwords">
+    Enforce strong password requirements: minimum 8 characters, uppercase, lowercase, numbers, and special characters.
+  </Accordion>
+
+  <Accordion title="Principle of Least Privilege">
+    Assign the minimum role required. Start with consultor and escalate only when necessary.
+  </Accordion>
+
+  <Accordion title="Regular Audits">
+    Periodically review user list and deactivate accounts that are no longer needed.
+  </Accordion>
+
+  <Accordion title="Deactivate, Don't Delete">
+    Use deactivation instead of deletion to maintain audit trail and data integrity.
+  </Accordion>
+
+  <Accordion title="Document Role Changes">
+    Keep records of why and when user roles are changed for compliance and security.
+  </Accordion>
+
+  <Accordion title="Monitor Admin Accounts">
+    Limit the number of admin accounts and monitor their activity closely.
+  </Accordion>
+</AccordionGroup>
+
+## API Quick Reference
+
+| Method | Endpoint | Permission | Description |
+|--------|----------|------------|-------------|
+| GET | `/api/v1/users/` | admin | List all users |
+| GET | `/api/v1/users/roles` | admin | List available roles |
+| POST | `/api/v1/users/` | admin | Create new user |
+| GET | `/api/v1/users/<id>` | admin | Get user details |
+| PUT | `/api/v1/users/<id>` | admin | Update user |
+| PATCH | `/api/v1/users/<id>/deactivate` | admin | Deactivate user |
+
+## Security Considerations
+
+<Warning>
+  **Password Storage**: Passwords are hashed using `werkzeug.security.generate_password_hash`. Never log or expose password hashes in API responses.
+</Warning>
+
+<Info>
+  **Audit Logging**: All user management operations are logged to the audit system with timestamps, admin user, and action details.
+</Info>
+
+<Warning>
+  **Default Admin**: Change the default admin password (`Admin1234!`) immediately after initial setup.
+</Warning>
+
+## Integration Examples
+
+<CodeGroup>
+
+```python Python
+import requests
+
+BASE_URL = "http://localhost:5000/api/v1"
+headers = {"X-User-Role": "admin", "Content-Type": "application/json"}
+
+# Create user
+user_data = {
+    "username": "jdoe",
+    "email": "jdoe@company.com",
+    "password": "SecurePass123!",
+    "role_id": 2
+}
+response = requests.post(f"{BASE_URL}/users/", json=user_data, headers=headers)
+print(response.json())
+
+# List users
+response = requests.get(f"{BASE_URL}/users/", headers=headers)
+print(response.json())
+
+# Deactivate user
+user_id = "a3d5f678-1234-5678-9abc-def012345678"
+response = requests.patch(f"{BASE_URL}/users/{user_id}/deactivate", headers=headers)
+print(response.json())
+```
+
+```javascript JavaScript
+const BASE_URL = "http://localhost:5000/api/v1";
+const headers = {
+  "X-User-Role": "admin",
+  "Content-Type": "application/json"
+};
+
+// Create user
+const userData = {
+  username: "jdoe",
+  email: "jdoe@company.com",
+  password: "SecurePass123!",
+  role_id: 2
+};
+
+fetch(`${BASE_URL}/users/`, {
+  method: "POST",
+  headers: headers,
+  body: JSON.stringify(userData)
+})
+  .then(res => res.json())
+  .then(data => console.log(data));
+
+// List users
+fetch(`${BASE_URL}/users/`, { headers })
+  .then(res => res.json())
+  .then(data => console.log(data));
+```
+
+```bash cURL
+# Create user
+curl -X POST http://localhost:5000/api/v1/users/ \
+  -H "Content-Type: application/json" \
+  -H "X-User-Role: admin" \
+  -d '{
+    "username": "jdoe",
+    "email": "jdoe@company.com",
+    "password": "SecurePass123!",
+    "role_id": 2
+  }'
+
+# List users
+curl -X GET http://localhost:5000/api/v1/users/ \
+  -H "X-User-Role: admin"
+
+# Deactivate user
+curl -X PATCH http://localhost:5000/api/v1/users/USER_ID/deactivate \
+  -H "X-User-Role: admin"
+```
+
+</CodeGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" href="/users/authentication" icon="lock">
+    Learn about the login and authentication system
+  </Card>
+
+  <Card title="Roles & Permissions" href="/users/roles-permissions" icon="user-shield">
+    Understand role-based access control
+  </Card>
+</CardGroup>

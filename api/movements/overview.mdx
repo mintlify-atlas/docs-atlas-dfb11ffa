@@ -1,0 +1,76 @@
+---
+title: "Movements Overview"
+description: "Track inventory movements including entries, exits, and adjustments"
+---
+
+## Introduction
+
+The Movements API enables tracking of all inventory changes for products. Every stock change is recorded as a movement with complete audit information.
+
+## Movement Types
+
+The system supports three types of inventory movements:
+
+<CardGroup cols={3}>
+  <Card title="ENTRY" icon="arrow-down">
+    Stock received from suppliers or new inventory
+  </Card>
+  <Card title="EXIT" icon="arrow-up">
+    Stock sold or removed from inventory (uses FIFO costing)
+  </Card>
+  <Card title="ADJUSTMENT" icon="wrench">
+    Manual corrections or adjustments to inventory
+  </Card>
+</CardGroup>
+
+## Movement Object
+
+All movements share the following structure:
+
+```python
+class Movement:
+    id: str                    # Unique identifier
+    product_id: str            # Product reference
+    supplier_id: str | None    # Supplier reference (for ENTRY)
+    customer_id: str | None    # Customer reference (for EXIT)
+    type: str                  # ENTRY, EXIT, or ADJUSTMENT
+    quantity: int              # Number of units
+    unit_price: float | None   # Price per unit for this transaction
+    total_price: float | None  # quantity * unit_price
+    total_cost: float | None   # FIFO calculated cost (for EXIT)
+    reference_id: str | None   # Batch ID, Order ID, etc.
+    notes: str | None          # Additional information
+    created_at: datetime       # Timestamp
+    created_by: str            # User who created the movement
+```
+
+## FIFO Costing
+
+For EXIT movements, the system automatically calculates the cost of goods sold (COGS) using the First-In-First-Out (FIFO) method:
+
+1. **Batch Tracking**: Each ENTRY creates a batch with its unit cost
+2. **Exit Processing**: EXIT movements deduct from the oldest batches first
+3. **Cost Calculation**: The `total_cost` field contains the actual COGS
+4. **Profit Analysis**: Compare `total_price` (revenue) vs `total_cost` (COGS)
+
+## Role Requirements
+
+<ParamField path="create_sale" type="Role">
+  Required roles: `admin`, `gestor`
+</ParamField>
+
+<ParamField path="list_movements" type="Role">
+  Required roles: `admin`, `gestor`, `consultor`
+</ParamField>
+
+## Base URL
+
+```
+/api/v1/movements
+```
+
+## Related Resources
+
+- [Products API](/api/products/overview) - Product management
+- [Batches API](/api/batches/overview) - Batch tracking for FIFO
+- [Authentication](/api/auth/overview) - How to authenticate requests
